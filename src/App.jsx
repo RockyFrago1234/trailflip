@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CATEGORIES, LISTINGS } from './data/listings'
 import { dealInfo } from './utils/format'
+import { supabase, isSupabaseConfigured } from './lib/supabase'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import FilterBar from './components/FilterBar'
@@ -9,7 +10,6 @@ import ListingModal from './components/ListingModal'
 import PostListingModal from './components/PostListingModal'
 import Footer from './components/Footer'
 
-const LS_LISTINGS = 'trailflip.listings.v1'
 const LS_SAVED = 'trailflip.saved.v1'
 
 function load(key, fallback) {
@@ -21,8 +21,31 @@ function load(key, fallback) {
   }
 }
 
+// Supabase row (snake_case) -> app listing shape (camelCase)
+function fromRow(r) {
+  return {
+    id: r.id,
+    title: r.title,
+    category: r.category,
+    type: r.type,
+    price: r.price,
+    estResale: r.est_resale,
+    condition: r.condition,
+    location: r.location,
+    emoji: r.emoji,
+    seller: r.seller,
+    rating: r.rating,
+    description: r.description,
+    tradeFor: r.trade_for,
+    source: r.source,
+    url: r.url,
+    postedAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+  }
+}
+
 export default function App() {
-  const [userListings, setUserListings] = useState(() => load(LS_LISTINGS, []))
+  const [listings, setListings] = useState([])
+  const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(() => load(LS_SAVED, []))
 
   const [query, setQuery] = useState('')
@@ -37,9 +60,35 @@ export default function App() {
   const [showPost, setShowPost] = useState(false)
   const [toast, setToast] = useState('')
 
+  // Load listings from the shared database (fall back to local seed if offline)
   useEffect(() => {
-    localStorage.setItem(LS_LISTINGS, JSON.stringify(userListings))
-  }, [userListings])
+    let active = true
+    async function loadListings() {
+      if (!isSupabaseConfigured) {
+        if (active) {
+          setListings(LISTINGS)
+          setLoading(false)
+        }
+        return
+      }
+      const { data, error } = await supabase
+        .from('listings')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (!active) return
+      if (error || !data) {
+        console.error('Supabase load failed, using local seed:', error?.message)
+        setListings(LISTINGS)
+      } else {
+        setListings(data.map(fromRow))
+      }
+      setLoading(false)
+    }
+    loadListings()
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     localStorage.setItem(LS_SAVED, JSON.stringify(saved))
@@ -51,7 +100,7 @@ export default function App() {
     return () => clearTimeout(t)
   }, [toast])
 
-  const all = useMemo(() => [...userListings, ...LISTINGS], [userListings])
+  const all = listings
   const savedSet = useMemo(() => new Set(saved), [saved])
 
   const filtered = useMemo(() => {
@@ -88,10 +137,34 @@ export default function App() {
     setSaved((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
-  function addListing(listing) {
-    setUserListings((prev) => [listing, ...prev])
+  async function addListing(listing) {
     setShowPost(false)
-    setToast('Listing posted — it is live at the top of the feed 🎉')
+    if (isSupabaseConfigured) {
+      const row = {
+        title: listing.title,
+        category: listing.category,
+        type: listing.type,
+        price: listing.price,
+        est_resale: listing.estResale,
+        condition: listing.condition,
+        location: listing.location,
+        emoji: listing.emoji,
+        seller: listing.seller,
+        rating: listing.rating,
+        description: listing.description,
+        trade_for: listing.tradeFor || '',
+      }
+      const { data, error } = await supabase.from('listings').insert(row).select().single()
+      if (error) {
+        console.error('Post failed:', error.message)
+        setToast('Could not post listing — please try again.')
+        return
+      }
+      setListings((prev) => [fromRow(data), ...prev])
+    } else {
+      setListings((prev) => [listing, ...prev])
+    }
+    setToast('Listing posted — live for everyone 🎉')
     setCategory('all')
     setType('all')
     setCondition('all')
@@ -156,13 +229,20 @@ export default function App() {
           count={filtered.length}
         />
 
-        <ListingGrid
-          listings={filtered}
-          savedSet={savedSet}
-          onToggleSave={toggleSave}
-          onOpen={setSelected}
-          onReset={resetFilters}
-        />
+        {loading ? (
+          <div className="mt-16 flex flex-col items-center justify-center gap-3 text-slate-500">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-forest-600" />
+            <p className="text-sm">Loading the latest gear…</p>
+          </div>
+        ) : (
+          <ListingGrid
+            listings={filtered}
+            savedSet={savedSet}
+            onToggleSave={toggleSave}
+            onOpen={setSelected}
+            onReset={resetFilters}
+          />
+        )}
       </main>
 
       <Footer onPost={() => setShowPost(true)} />
