@@ -14,6 +14,7 @@ import {
   suggestedFee,
 } from '../lib/items'
 import { fileToResizedDataURL } from '../lib/resizeImage'
+import { cleanWhiteBg } from '../lib/cleanupPhoto'
 
 const FIELD =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-forest-400 focus:bg-white focus:ring-2 focus:ring-forest-100'
@@ -151,6 +152,22 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
       onChange(updated)
     } catch (e) {
       setError(e.message || 'Could not add those photos.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function cleanPhoto(url) {
+    setBusy('clean')
+    setError('')
+    try {
+      const dataUrl = await cleanWhiteBg(url)
+      const stored = await uploadListingPhotos(userId, [dataUrl])
+      const updated = await updateItem(item.id, { photos: [...stored, ...item.photos] })
+      onChange(updated)
+      setNote('Clean white-background version added as your cover photo.')
+    } catch (e) {
+      setError(e.message || 'Background cleanup failed — try a clearer, well-lit photo.')
     } finally {
       setBusy('')
     }
@@ -574,7 +591,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
               {gallery.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {item.photos.map((u) => (
-                    <Thumb key={u} url={u} onRemove={() => removePhoto(u, 'mine')} />
+                    <Thumb key={u} url={u} onRemove={() => removePhoto(u, 'mine')} onClean={() => cleanPhoto(u)} cleaning={busy === 'clean'} />
                   ))}
                   {item.officialPhotos.map((u) => (
                     <Thumb key={u} url={u} badge="official" onRemove={() => removePhoto(u, 'official')} />
@@ -677,12 +694,22 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
   )
 }
 
-function Thumb({ url, badge, onRemove }) {
+function Thumb({ url, badge, onRemove, onClean, cleaning }) {
   return (
     <div className="relative h-20 w-20 overflow-hidden rounded-xl border border-slate-200">
       <img src={url} alt="" className="h-full w-full object-cover" />
       {badge && <span className="absolute bottom-0 left-0 right-0 bg-black/55 py-0.5 text-center text-[9px] font-semibold uppercase text-white">{badge}</span>}
       <button onClick={onRemove} className="absolute right-0.5 top-0.5 grid h-5 w-5 place-items-center rounded-full bg-white/90 text-xs text-slate-700 shadow" aria-label="Remove photo">×</button>
+      {onClean && (
+        <button
+          onClick={onClean}
+          disabled={cleaning}
+          className="absolute bottom-0.5 left-0.5 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-bold text-slate-700 shadow transition hover:bg-white disabled:opacity-60"
+          title="Remove the background → clean white-bg cover photo"
+        >
+          {cleaning ? '…' : '✨ BG'}
+        </button>
+      )}
     </div>
   )
 }
