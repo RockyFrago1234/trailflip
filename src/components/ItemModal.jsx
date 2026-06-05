@@ -275,6 +275,19 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
     }
   }
 
+  function sendToExtension() {
+    const payload = {
+      title: draft.title || item.title,
+      price: item.listPrice ?? (Number(listPrice) || null),
+      description: draft.description || item.description || '',
+      condition: draft.condition || item.condition || '',
+    }
+    window.postMessage({ source: 'trailflip-lister', listing: payload }, '*')
+    copy(draft.title || item.title, 'Title')
+    window.open('https://www.facebook.com/marketplace/create/item', '_blank')
+    setNote('Sent to the TrailFlip extension — Facebook auto-fills if the extension is installed (chrome://extensions → Load unpacked → extension/).')
+  }
+
   async function createPaymentLink() {
     setPayBusy(true)
     setError('')
@@ -661,6 +674,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button className={accent} onClick={() => { copy(draft.title || item.title, 'Title'); window.open('https://www.facebook.com/marketplace/create/item', '_blank') }}>Facebook ↗</button>
+                  <button className={ghost} onClick={sendToExtension} title="Auto-fills the Facebook form if the TrailFlip browser extension is installed">📨 Auto-fill FB</button>
                   <button className={accent} onClick={() => { copy(draft.title || item.title, 'Title'); window.open('https://www.ebay.com/sl/sell', '_blank') }}>eBay ↗</button>
                   {typeof navigator !== 'undefined' && navigator.share && (
                     <button className={ghost} onClick={() => navigator.share({ title: item.title, text: buildListingText(item) }).catch(() => {})}>Share…</button>

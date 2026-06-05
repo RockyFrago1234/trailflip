@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "TrailFlip Lister",
+  "version": "1.0.0",
+  "description": "Auto-fills your TrailFlip listing into the Facebook Marketplace create form.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://trailflip.vercel.app/*",
+    "https://*.facebook.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://trailflip.vercel.app/*"],
+      "js": ["content-trailflip.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.facebook.com/marketplace/create/*"],
+      "js": ["content-facebook.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "TrailFlip Lister"
+  }
+}
