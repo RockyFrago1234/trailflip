@@ -27,13 +27,14 @@ function PnL({ items }) {
   const p = portfolio(items)
   const cells = [
     { label: 'Tied up', value: currency(p.tiedUp) },
-    { label: 'Realized profit', value: `${p.realized >= 0 ? '+' : ''}${currency(p.realized)}`, good: true },
+    { label: 'Net profit', value: `${p.realized >= 0 ? '+' : ''}${currency(p.realized)}`, good: true },
     { label: 'Projected', value: `+${currency(p.projected)}` },
+    { label: 'Mileage ded.', value: currency(p.mileageDeduction) },
     { label: 'Flips closed', value: String(p.soldCount) },
     { label: 'Avg hold', value: p.avgHold != null ? `${p.avgHold}d` : '—' },
   ]
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
       {cells.map((c) => (
         <div key={c.label} className="rounded-2xl border border-slate-200 bg-white p-3">
           <p className="text-[11px] uppercase tracking-wide text-slate-400">{c.label}</p>

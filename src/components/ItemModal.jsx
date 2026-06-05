@@ -3,7 +3,7 @@ import { Close } from './icons'
 import ImagePlaceholder from './ImagePlaceholder'
 import EvaluationReport from './EvaluationReport'
 import { getCategory, CONDITIONS } from '../data/listings'
-import { currency, itemMath, effectiveScore } from '../utils/format'
+import { currency, itemMath, effectiveScore, MILEAGE_RATE } from '../utils/format'
 import {
   STATUS_META,
   updateItem,
@@ -11,6 +11,7 @@ import {
   uploadListingPhotos,
   baseDraft,
   buildListingText,
+  suggestedFee,
 } from '../lib/items'
 import { fileToResizedDataURL } from '../lib/resizeImage'
 
@@ -49,7 +50,15 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
   const [buy, setBuy] = useState({ price: item.askingPrice ?? '', source: 'facebook', date: todayStr() })
   const [draft, setDraft] = useState(() => item.draft || baseDraft(item))
   const [listPrice, setListPrice] = useState(item.listPrice ?? item.draft?.suggested_price_usd ?? baseDraft(item).suggested_price_usd ?? '')
-  const [sold, setSold] = useState({ price: item.listPrice ?? '', date: todayStr(), via: '' })
+  const [sold, setSold] = useState({
+    price: item.soldPrice ?? item.listPrice ?? '',
+    date: item.soldAt ? new Date(item.soldAt).toISOString().slice(0, 10) : todayStr(),
+    via: item.soldVia || item.buySource || '',
+    fees: item.fees ?? '',
+    shipping: item.shippingCost ?? '',
+    supplies: item.suppliesCost ?? '',
+    miles: item.miles ?? '',
+  })
   const [tagInput, setTagInput] = useState('')
   const [officialUrl, setOfficialUrl] = useState(item.evaluation?.manufacturer_url || '')
   const [official, setOfficial] = useState(null) // { images:[{url,dataUrl,source}], note }
@@ -114,6 +123,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
   }
 
   function saveSold() {
+    const num = (v) => (v === '' || v == null ? null : Number(v))
     patchItem(
       'sold',
       {
@@ -121,8 +131,12 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
         soldPrice: Number(sold.price) || null,
         soldAt: new Date(sold.date).getTime(),
         soldVia: sold.via || null,
+        fees: num(sold.fees),
+        shippingCost: num(sold.shipping),
+        suppliesCost: num(sold.supplies),
+        miles: num(sold.miles),
       },
-      'Nice flip! Logged to your books — export anytime from the catalogue.',
+      'Nice flip! Net profit logged to your books — export anytime from the catalogue.',
     )
   }
 
@@ -279,6 +293,8 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
   } else if (item.status === 'listed') {
     actions.push(<button key="sold" className={primary} onClick={() => setPanel(panel === 'sold' ? null : 'sold')}>💰 Mark sold</button>)
     actions.push(<button key="edit" className={ghost} onClick={() => setPanel(panel === 'list' ? null : 'list')}>✏️ Edit listing</button>)
+  } else if (item.status === 'sold') {
+    actions.push(<button key="editsale" className={ghost} onClick={() => setPanel(panel === 'sold' ? null : 'sold')}>✏️ Edit sale</button>)
   }
 
   return (
@@ -344,7 +360,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
               <Stat label="MSRP" value={currency(item.msrp)} />
               <Stat label="Used value" value={item.usedLow != null || item.usedHigh != null ? `${currency(item.usedLow)}–${currency(item.usedHigh)}` : '—'} />
               {item.status === 'sold' ? (
-                <Stat label="Realized" value={`${math.realized >= 0 ? '+' : ''}${currency(math.realized)}`} highlight />
+                <Stat label="Net profit" value={`${math.realized >= 0 ? '+' : ''}${currency(math.realized)}`} highlight />
               ) : item.status === 'owned' || item.status === 'listed' ? (
                 <Stat label="Est. profit" value={`+${currency(math.projected)}`} highlight />
               ) : (
@@ -358,6 +374,8 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
               {item.buyPrice != null && <span>Paid <b className="text-slate-900">{currency(item.buyPrice)}</b>{item.buySource ? ` · ${item.buySource}` : ''}</span>}
               {item.listPrice != null && item.status !== 'sold' && <span>Listed <b className="text-slate-900">{currency(item.listPrice)}</b></span>}
               {item.soldPrice != null && <span>Sold <b className="text-slate-900">{currency(item.soldPrice)}</b></span>}
+              {item.status === 'sold' && math.costs > 0 && <span>Costs <b className="text-slate-900">{currency(math.costs)}</b></span>}
+              {item.status === 'sold' && math.mileageDeduction > 0 && <span>Mileage ded. <b className="text-slate-900">{currency(math.mileageDeduction)}</b></span>}
               {math.holdDays != null && <span>Held <b className="text-slate-900">{math.holdDays}d</b></span>}
             </div>
 
@@ -465,10 +483,61 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
                     <input type="date" value={sold.date} onChange={(e) => setSold({ ...sold, date: e.target.value })} className={FIELD} />
                   </div>
                 </div>
-                {Number(sold.price) > 0 && item.buyPrice != null && (
-                  <p className="text-sm text-slate-600">Profit on this flip: <b className="text-forest-700">+{currency(Number(sold.price) - item.buyPrice)}</b></p>
-                )}
-                <button className={primary} onClick={saveSold} disabled={busy === 'sold'}>{busy === 'sold' ? 'Saving…' : 'Confirm sale'}</button>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Sold via</Label>
+                    <select
+                      value={sold.via}
+                      onChange={(e) => {
+                        const via = e.target.value
+                        const suggest = suggestedFee(Number(sold.price) || 0, via)
+                        setSold((s) => ({ ...s, via, fees: s.fees === '' && suggest ? String(suggest) : s.fees }))
+                      }}
+                      className={FIELD}
+                    >
+                      <option value="">—</option>
+                      {SOURCES.map((x) => <option key={x} value={x}>{x}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Marketplace fees ($)</Label>
+                    <input type="number" min="0" value={sold.fees} onChange={(e) => setSold({ ...sold, fees: e.target.value })} className={FIELD} placeholder="auto by platform" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label>Shipping ($)</Label>
+                    <input type="number" min="0" value={sold.shipping} onChange={(e) => setSold({ ...sold, shipping: e.target.value })} className={FIELD} placeholder="0" />
+                  </div>
+                  <div>
+                    <Label>Supplies ($)</Label>
+                    <input type="number" min="0" value={sold.supplies} onChange={(e) => setSold({ ...sold, supplies: e.target.value })} className={FIELD} placeholder="0" />
+                  </div>
+                  <div>
+                    <Label>Miles (round-trip)</Label>
+                    <input type="number" min="0" value={sold.miles} onChange={(e) => setSold({ ...sold, miles: e.target.value })} className={FIELD} placeholder="0" />
+                  </div>
+                </div>
+                {Number(sold.price) > 0 && item.buyPrice != null && (() => {
+                  const sp = Number(sold.price) || 0
+                  const net = sp - item.buyPrice - (Number(sold.fees) || 0) - (Number(sold.shipping) || 0) - (Number(sold.supplies) || 0)
+                  const md = (Number(sold.miles) || 0) * MILEAGE_RATE
+                  return (
+                    <div className="rounded-xl bg-white p-3 text-sm ring-1 ring-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Net profit (after costs)</span>
+                        <b className={net >= 0 ? 'text-forest-700' : 'text-rose-600'}>{net >= 0 ? '+' : ''}{currency(net)}</b>
+                      </div>
+                      {md > 0 && (
+                        <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
+                          <span>+ mileage tax deduction ({sold.miles} mi)</span>
+                          <span>{currency(md)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+                <button className={primary} onClick={saveSold} disabled={busy === 'sold'}>{busy === 'sold' ? 'Saving…' : item.status === 'sold' ? 'Save sale' : 'Confirm sale'}</button>
               </div>
             )}
 

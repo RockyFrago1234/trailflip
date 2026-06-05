@@ -16,6 +16,22 @@ export const STATUS_META = {
   archived: { label: 'Archived', emoji: '🗄️', pill: 'bg-slate-100 text-slate-500' },
 }
 
+// Rough marketplace fee rates, for auto-suggesting fees when an item sells.
+export const PLATFORM_FEE_PCT = {
+  ebay: 0.133,
+  mercari: 0.1,
+  poshmark: 0.2,
+  offerup: 0,
+  facebook: 0,
+  craigslist: 0,
+  'garage sale': 0,
+  other: 0,
+}
+export function suggestedFee(price, via) {
+  const pct = PLATFORM_FEE_PCT[String(via || '').toLowerCase()] ?? 0
+  return price && pct ? Math.round(price * pct) : 0
+}
+
 // Map the evaluator's free-text category to one of our category ids.
 const CAT_RULES = [
   [/bike|cycl|\bmtb\b|hardtail|gravel/i, 'bikes'],
@@ -73,6 +89,10 @@ export function itemFromRow(r) {
     soldPrice: r.sold_price,
     soldAt: ms(r.sold_at),
     soldVia: r.sold_via,
+    fees: r.fees,
+    shippingCost: r.shipping_cost,
+    suppliesCost: r.supplies_cost,
+    miles: r.miles,
     condition: r.condition,
     description: r.description,
     sourceUrl: r.source_url,
@@ -93,6 +113,7 @@ const FIELD_MAP = {
   askingPrice: 'asking_price', buyPrice: 'buy_price', boughtAt: 'bought_at',
   buySource: 'buy_source', listPrice: 'list_price', listedAt: 'listed_at',
   soldPrice: 'sold_price', soldAt: 'sold_at', soldVia: 'sold_via',
+  fees: 'fees', shippingCost: 'shipping_cost', suppliesCost: 'supplies_cost', miles: 'miles',
   condition: 'condition', description: 'description', sourceUrl: 'source_url',
   photos: 'photos', officialPhotos: 'official_photos',
   representativePhotos: 'representative_photos', tags: 'tags', notes: 'notes',
