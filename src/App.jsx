@@ -13,6 +13,7 @@ import AuthModal from './components/AuthModal'
 import EvaluatorModal from './components/EvaluatorModal'
 import Catalogue from './components/Catalogue'
 import Compare from './components/Compare'
+import Books from './components/Books'
 import Footer from './components/Footer'
 import { loadItems } from './lib/items'
 import { fileToResizedDataURL } from './lib/resizeImage'
@@ -375,6 +376,8 @@ export default function App() {
         />
       ) : effectiveView === 'compare' ? (
         <Compare userId={user?.id} />
+      ) : effectiveView === 'books' ? (
+        <Books items={items} userId={user?.id} />
       ) : (
         <>
           <Hero stats={stats} onPost={openPost} onBrowse={scrollToBrowse} />

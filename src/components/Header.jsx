@@ -36,6 +36,12 @@ export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost
               <span className="sm:hidden">⚖️</span><span className="hidden sm:inline">⚖️ Compare</span>
             </button>
             <button
+              onClick={() => onView('books')}
+              className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${view === 'books' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <span className="sm:hidden">💰</span><span className="hidden sm:inline">💰 Books</span>
+            </button>
+            <button
               onClick={() => onView('market')}
               className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${view === 'market' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
