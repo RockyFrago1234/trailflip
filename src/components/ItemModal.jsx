@@ -64,6 +64,8 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
   const [officialUrl, setOfficialUrl] = useState(item.evaluation?.manufacturer_url || '')
   const [official, setOfficial] = useState(null) // { images:[{url,dataUrl,source}], note }
   const [picked, setPicked] = useState({})
+  const [genBusy, setGenBusy] = useState('') // '' | 'studio' | 'representative'
+  const [genImage, setGenImage] = useState(null) // { image, mode }
 
   const photoInput = useRef(null)
 
@@ -219,6 +221,52 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
       setNote(`Added ${n} photo${n > 1 ? 's' : ''}${rep.length ? ` (${rep.length} similar-model — disclosed in the listing)` : ''}.`)
     } catch (e) {
       setError(e.message || 'Could not add those.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function generateImage(mode) {
+    setGenBusy(mode)
+    setError('')
+    setGenImage(null)
+    try {
+      const payload = { mode, brand: item.brand, model: item.model, year: item.year, category: cat.label, title: item.title }
+      if (mode === 'studio') payload.imageUrl = item.photos[0]
+      const resp = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Image generation failed.')
+      if (data.configured === false) {
+        setError('AI image generation needs an OpenAI API key (set OPENAI_API_KEY on the server).')
+        return
+      }
+      setGenImage({ image: data.image, mode: data.mode })
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setGenBusy('')
+    }
+  }
+
+  async function addGenerated() {
+    if (!genImage) return
+    setBusy('gen-add')
+    setError('')
+    try {
+      const [stored] = await uploadListingPhotos(userId, [genImage.image])
+      const key = genImage.mode === 'studio' ? 'photos' : 'representativePhotos'
+      const updated = await updateItem(item.id, { [key]: [...item[key], stored] })
+      onChange(updated)
+      setGenImage(null)
+      setNote(genImage.mode === 'studio'
+        ? 'AI studio photo added to your photos.'
+        : 'AI representative image added — it’s auto-disclosed as representative in your listing text.')
+    } catch (e) {
+      setError(e.message || 'Could not save the image.')
     } finally {
       setBusy('')
     }
@@ -658,6 +706,33 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
                   )}
                 </div>
               )}
+
+              {/* AI-generated product photos */}
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <Label>AI product photos</Label>
+                <div className="flex flex-wrap gap-2">
+                  {item.photos.length > 0 && (
+                    <button onClick={() => generateImage('studio')} disabled={!!genBusy || !!busy} className="rounded-full bg-trail-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-trail-600 disabled:opacity-50">
+                      {genBusy === 'studio' ? 'Generating…' : '✨ Studio version of my photo'}
+                    </button>
+                  )}
+                  {(item.brand || item.model) && (
+                    <button onClick={() => generateImage('representative')} disabled={!!genBusy || !!busy} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-50">
+                      {genBusy === 'representative' ? 'Generating…' : '🎨 Generate representative image'}
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">Studio mode re-lights your real photo into a clean catalog shot; representative mode generates a catalog image of the model (auto-disclosed as representative in your listing).</p>
+                {genImage && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <img src={genImage.image} alt="AI generated" className="h-28 w-28 rounded-xl object-cover ring-1 ring-slate-200" />
+                    <div className="flex flex-col gap-2">
+                      <button onClick={addGenerated} disabled={busy === 'gen-add'} className={primary}>{busy === 'gen-add' ? 'Saving…' : 'Add this photo'}</button>
+                      <button onClick={() => setGenImage(null)} className={ghost}>Discard</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ---- Tags / folders ---- */}
