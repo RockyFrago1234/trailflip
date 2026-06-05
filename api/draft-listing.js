@@ -13,14 +13,17 @@ const WEB_SEARCH = { type: 'web_search_20260209', name: 'web_search', max_uses: 
 
 const RESEARCH_SYSTEM = `You research a piece of used outdoor gear so a reseller can write a 100% accurate listing. From the photos, identify the exact make / model / year. Then use web_search to look up the manufacturer's owner's manual and official spec sheet for that exact model. Gather real, specific facts: official specifications (sizes, materials, weight, components, capacities, drivetrain, etc.), what's included when sold new, and notable model details. Also inspect the photos for any aftermarket parts or modifications (non-stock components, added accessories, wear, damage). Never invent specs — only report numbers you actually found or can read. Keep it factual and concise.`
 
-const DRAFT_SYSTEM = `You are a top-performing reseller writing marketplace listings for used outdoor gear. Using the photos AND the research notes provided, write a listing so appealing a buyer wants it immediately — while staying scrupulously honest.
+const DRAFT_SYSTEM = `You are a top-performing reseller writing a PUBLIC marketplace listing for used outdoor gear. This is sales copy — your job is to make a buyer want it. Use the photos AND the research notes, and stay honest.
 
 Rules:
+- PROMOTE the item. Lead with what's great: what it's perfect for, standout features/specs, what's included, and why it's a great buy at this price.
+- Do NOT include buyer-beware content: no lists of problems, failure points, "things to check / inspect", reliability warnings, or reasons not to buy. That critique is for the seller privately — it does not belong in the listing.
+- You MAY add ONE brief, neutral, honest condition line if there's genuine visible wear or damage (to set expectations and avoid returns) — but never dwell on negatives or make the item sound risky.
 - Use the researched manufacturer specs for accuracy (sizes, materials, components). Don't contradict the photos.
-- State clearly whether the item is STOCK or MODIFIED. If modified, list each non-stock part/change you can see or infer. If it looks fully stock, say so.
-- Write a punchy, specific title and a scannable, benefit-driven description: what it's great for, standout specs, what's included, and an honest condition line. No fluff, no AI clichés.
+- State clearly whether the item is STOCK or MODIFIED. If modified, list each non-stock part/change (mods are usually selling points). If fully stock, say so.
+- Punchy, specific title; scannable, benefit-driven description. No fluff, no AI clichés.
 - Suggest a fair asking price (upper-middle of typical used value) that sells fast with healthy margin.
-- Add marketplace keywords buyers actually search, and recommend the best platform and timing to sell this specific item.`
+- Add marketplace keywords buyers actually search, and recommend the best platform and timing for this item.`
 
 function buildDraftText({ note, research }) {
   let t = `Write a complete, desirable marketplace listing for the outdoor gear in the photo(s) using the draft_listing tool. Allowed categories: ${CATEGORIES.join(', ')}.`
@@ -39,7 +42,7 @@ const TOOL = {
       title: { type: 'string', description: 'Compelling, specific title (~50-70 chars). Include brand/model.' },
       category: { type: 'string', enum: CATEGORIES },
       condition: { type: 'string', enum: ['New', 'Like New', 'Good', 'Fair'] },
-      description: { type: 'string', description: 'Desirable, scannable description (2-5 short paragraphs / lines). Honest about condition. Make them want it now.' },
+      description: { type: 'string', description: 'Benefit-led sales copy that makes a buyer want it now — lead with strengths, uses, features and what\'s included. At most one brief, honest condition line; NO problem lists, failure points, or "what to check".' },
       key_specs: { type: 'array', items: { type: 'string' }, description: 'Notable specs / included items — prefer the researched manufacturer specs.' },
       stock_status: { type: 'string', enum: ['stock', 'modified', 'unknown'], description: 'Is the item stock or modified from factory?' },
       modifications: { type: 'array', items: { type: 'string' }, description: 'Specific aftermarket / non-stock parts or changes. Empty array if stock.' },

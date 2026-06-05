@@ -182,9 +182,28 @@ export function fieldsFromEvaluation(ev, { status = 'prospect', askingPrice = nu
     flipScore: Number.isFinite(ev.deal_score) ? ev.deal_score : null,
     askingPrice: askingPrice ?? ev.listed_price_usd ?? null,
     condition: 'Good',
-    description: ev.summary || '',
+    description: '', // listing copy is generated promotionally; the buyer take stays in `evaluation`
     sourceUrl,
   }
+}
+
+// A PUBLIC-FACING promotional starter description — sells the item, never leads
+// with the buyer-side critique (that lives in the saved evaluation). "Research
+// & rewrite" replaces this with richer, photo-grounded copy.
+export function promoDescription(item) {
+  const ev = item.evaluation || {}
+  const name = [item.brand, item.model, item.year].filter(Boolean).join(' ') || item.title || 'This gear'
+  const cond = (item.condition || 'Good').toLowerCase()
+  const lines = [`${name} in ${cond} condition — well cared for and ready to use.`]
+  const details = (Array.isArray(ev.key_details) ? ev.key_details : []).filter(Boolean).slice(0, 5)
+  if (details.length) {
+    lines.push('')
+    lines.push('Highlights:')
+    for (const d of details) lines.push(`• ${d}`)
+  }
+  lines.push('')
+  lines.push('Clean and ready to go — message me with any questions or to arrange pickup.')
+  return lines.join('\n')
 }
 
 // A starter listing draft assembled from the saved evaluation — no API call.
@@ -199,7 +218,7 @@ export function baseDraft(item) {
     (item.msrp != null ? Math.round(item.msrp * 0.55) : null)
   return {
     title,
-    description: ev.summary || item.description || '',
+    description: promoDescription(item),
     key_specs: Array.isArray(ev.key_details) ? ev.key_details : [],
     condition: item.condition || 'Good',
     suggested_price_usd: price,
