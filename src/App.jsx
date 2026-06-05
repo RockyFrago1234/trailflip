@@ -51,6 +51,7 @@ export default function App() {
   // Personal flipper catalogue (private items) + which workspace is showing.
   const [items, setItems] = useState([])
   const [view, setView] = useState('catalogue')
+  const [compareBoardId, setCompareBoardId] = useState(null) // board to open in Compare
   const [shareInit, setShareInit] = useState(null) // { image, url } from a "Share → TrailFlip"
 
   const [query, setQuery] = useState('')
@@ -257,6 +258,17 @@ export default function App() {
     setShowEvaluator(true)
   }
 
+  // Catalogue → Compare: open (or create) a board with the selected items.
+  function openComparison(boardId) {
+    setCompareBoardId(boardId)
+    setView('compare')
+  }
+  // A plain "Compare" tab click should land on the board list, not a stale board.
+  function handleView(v) {
+    if (v === 'compare') setCompareBoardId(null)
+    setView(v)
+  }
+
   async function addListing(listing) {
     setShowPost(false)
     if (isSupabaseConfigured && user) {
@@ -361,7 +373,7 @@ export default function App() {
         onLogin={() => requireAuth('')}
         onEvaluate={openEvaluator}
         view={effectiveView}
-        onView={setView}
+        onView={handleView}
       />
 
       {effectiveView === 'catalogue' ? (
@@ -373,9 +385,10 @@ export default function App() {
           onItemAdd={addItem}
           onScan={openEvaluator}
           onEvaluateUrl={evaluateUrl}
+          onOpenCompare={openComparison}
         />
       ) : effectiveView === 'compare' ? (
-        <Compare userId={user?.id} />
+        <Compare userId={user?.id} openBoardId={compareBoardId} />
       ) : effectiveView === 'books' ? (
         <Books items={items} userId={user?.id} />
       ) : (

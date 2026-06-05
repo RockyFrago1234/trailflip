@@ -48,7 +48,7 @@ function MoneyLine({ item }) {
   )
 }
 
-export default function ItemCard({ item, onOpen }) {
+export default function ItemCard({ item, onOpen, selectable = false, selected = false, onSelect }) {
   const cat = getCategory(item.category)
   const cover = item.photos[0] || item.officialPhotos[0] || null
   const meta = STATUS_META[item.status] || STATUS_META.prospect
@@ -57,8 +57,8 @@ export default function ItemCard({ item, onOpen }) {
 
   return (
     <article
-      onClick={() => onOpen(item)}
-      className="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      onClick={() => (selectable ? onSelect(item) : onOpen(item))}
+      className={`group cursor-pointer overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${selected ? 'border-forest-500 ring-2 ring-forest-500' : 'border-slate-200'}`}
     >
       <div className="relative">
         {cover ? (
@@ -83,6 +83,12 @@ export default function ItemCard({ item, onOpen }) {
         <span className="absolute bottom-3 left-3 rounded-full bg-black/45 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">
           {cat.emoji} {cat.label}
         </span>
+
+        {selectable && (
+          <span className={`absolute bottom-3 right-3 grid h-7 w-7 place-items-center rounded-full text-sm font-bold backdrop-blur transition ${selected ? 'bg-forest-600 text-white ring-2 ring-white' : 'bg-black/40 text-white/80 ring-1 ring-white/60'}`}>
+            {selected ? '✓' : ''}
+          </span>
+        )}
       </div>
 
       <div className="p-4">

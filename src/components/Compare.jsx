@@ -143,9 +143,9 @@ function CompareTable({ candidates, bestId }) {
   )
 }
 
-export default function Compare({ userId }) {
+export default function Compare({ userId, openBoardId = null }) {
   const [boards, setBoards] = useState(() => loadBoards(userId))
-  const [activeId, setActiveId] = useState(null)
+  const [activeId, setActiveId] = useState(openBoardId)
   const [form, setForm] = useState({ title: '', target: '' })
   const [addMode, setAddMode] = useState('upload')
   const [urlInput, setUrlInput] = useState('')

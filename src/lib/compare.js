@@ -47,6 +47,41 @@ function hostOf(url) {
   }
 }
 
+// Turn a catalogue item into a comparison candidate. Reuses the item's saved
+// AI evaluation, so a scanned listing is compared without re-appraising it.
+export function candidateFromItem(item) {
+  const cover = item.photos?.[0] || item.officialPhotos?.[0] || item.representativePhotos?.[0] || null
+  const price = item.status === 'sold' ? item.soldPrice : item.askingPrice ?? item.listPrice ?? item.buyPrice ?? null
+  return {
+    id: uid(),
+    title: item.title || [item.brand, item.model].filter(Boolean).join(' ') || 'Catalogue item',
+    url: item.sourceUrl || null,
+    image: cover,
+    price: price ?? null,
+    location: '',
+    condition: item.condition || '',
+    evaluation: item.evaluation || null,
+    ai: null,
+    fromItemId: item.id,
+  }
+}
+
+// Append candidates to a board (creating one if boardId is null/missing).
+// Operates directly on localStorage; returns the board id to open.
+export function addToBoard(userId, boardId, candidates, { title } = {}) {
+  const boards = loadBoards(userId)
+  let board = boardId ? boards.find((b) => b.id === boardId) : null
+  if (!board) {
+    board = newBoard({ title: title || 'Catalogue comparison', target: '' })
+    boards.unshift(board)
+  }
+  board.candidates = [...board.candidates, ...candidates]
+  board.result = null
+  board.updatedAt = Date.now()
+  saveBoards(userId, boards)
+  return board.id
+}
+
 // Evaluate any un-appraised candidates, then ask the AI to rank them all.
 // `dataUrls` maps candidate id -> in-session screenshot data URL (best quality).
 export async function runComparison(board, { onProgress, dataUrls = {} } = {}) {

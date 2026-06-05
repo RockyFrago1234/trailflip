@@ -4,6 +4,7 @@ import ItemModal from './ItemModal'
 import DealScanner from './DealScanner'
 import { STATUS_META } from '../lib/items'
 import { loadSearches, createSearch, deleteSearch, marketplaceLinks } from '../lib/searches'
+import { loadBoards, addToBoard, candidateFromItem } from '../lib/compare'
 import { currency, portfolio, toCSV, effectiveScore } from '../utils/format'
 
 const FOLDERS = [
@@ -47,13 +48,16 @@ function PnL({ items }) {
   )
 }
 
-export default function Catalogue({ items, userId, onItemChange, onItemDelete, onItemAdd, onScan, onEvaluateUrl }) {
+export default function Catalogue({ items, userId, onItemChange, onItemDelete, onItemAdd, onScan, onEvaluateUrl, onOpenCompare }) {
   const [folder, setFolder] = useState('all')
   const [tag, setTag] = useState(null)
   const [scoreBand, setScoreBand] = useState(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [scanHunt, setScanHunt] = useState(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [targetBoard, setTargetBoard] = useState('')
 
   // Saved "deal hunts"
   const [searches, setSearches] = useState([])
@@ -134,6 +138,31 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
     URL.revokeObjectURL(url)
   }
 
+  // --- Select items to drop into a comparison ---
+  const compareBoards = useMemo(() => (selectMode ? loadBoards(userId) : []), [selectMode, userId])
+  function toggleSelect(item) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(item.id)) next.delete(item.id)
+      else next.add(item.id)
+      return next
+    })
+  }
+  function cancelSelect() {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    setTargetBoard('')
+  }
+  function addSelectedToCompare() {
+    const chosen = items.filter((i) => selectedIds.has(i.id))
+    if (!chosen.length) return
+    const candidates = chosen.map(candidateFromItem)
+    const title = chosen.length === 1 ? chosen[0].title : `${chosen[0].brand || chosen[0].title} options`
+    const boardId = addToBoard(userId, targetBoard || null, candidates, { title })
+    cancelSelect()
+    onOpenCompare?.(boardId)
+  }
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -142,6 +171,9 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
           <p className="text-sm text-slate-500">Every deal you’ve scanned, owned, and flipped — and the profit behind it.</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => (selectMode ? cancelSelect() : setSelectMode(true))} disabled={!items.length} className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-40">
+            {selectMode ? 'Cancel' : '⚖️ Compare'}
+          </button>
           <button onClick={exportCSV} disabled={!items.length} className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-40">
             ⬇ Export CSV
           </button>
@@ -281,8 +313,32 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
       ) : (
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {visible.map((item) => (
-            <ItemCard key={item.id} item={item} onOpen={(i) => setSelectedId(i.id)} />
+            <ItemCard
+              key={item.id}
+              item={item}
+              onOpen={(i) => setSelectedId(i.id)}
+              selectable={selectMode}
+              selected={selectedIds.has(item.id)}
+              onSelect={toggleSelect}
+            />
           ))}
+        </div>
+      )}
+
+      {selectMode && (
+        <div className="sticky bottom-4 z-20 mt-5 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+          <span className="text-sm font-semibold text-slate-700">
+            {selectedIds.size ? `${selectedIds.size} selected` : 'Tap items to compare'}
+          </span>
+          <select value={targetBoard} onChange={(e) => setTargetBoard(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            <option value="">➕ New comparison</option>
+            {compareBoards.map((b) => (
+              <option key={b.id} value={b.id}>{b.title}</option>
+            ))}
+          </select>
+          <button onClick={addSelectedToCompare} disabled={selectedIds.size === 0} className="ml-auto rounded-full bg-forest-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-forest-700 disabled:opacity-40">
+            Add to comparison →
+          </button>
         </div>
       )}
 
