@@ -42,7 +42,7 @@ export default function Books({ items, userId }) {
     const v = Number(localStorage.getItem('trailflip:setAsideRate'))
     return v > 0 && v < 1 ? v : DEFAULT_SET_ASIDE
   })
-  const [form, setForm] = useState({ date: todayStr(), category: 'supplies', amount: '', note: '' })
+  const [form, setForm] = useState({ date: todayStr(), category: 'supplies', amount: '', note: '', itemId: '' })
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -64,15 +64,16 @@ export default function Books({ items, userId }) {
 
   const years = useMemo(() => taxYears(items, expenses), [items, expenses])
   const b = useMemo(() => computeBooks(items, expenses, year, rate), [items, expenses, year, rate])
+  const itemsById = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.title])), [items])
 
   async function addExpense() {
     const amount = Number(form.amount)
     if (!amount || amount <= 0) return
     setError('')
     try {
-      const e = await createExpense(userId, { date: form.date, category: form.category, amount, note: form.note })
+      const e = await createExpense(userId, { date: form.date, category: form.category, amount, note: form.note, itemId: form.itemId || null })
       setExpenses((prev) => [e, ...prev])
-      setForm({ date: todayStr(), category: form.category, amount: '', note: '' })
+      setForm({ date: todayStr(), category: form.category, amount: '', note: '', itemId: form.itemId })
     } catch (err) {
       setError(err.message || 'Could not save that expense.')
     }
@@ -188,13 +189,17 @@ export default function Books({ items, userId }) {
           </div>
         ) : (
           <>
-            <div className="mt-3 grid gap-2 sm:grid-cols-[auto_1fr_auto_2fr_auto]">
+            <div className="mt-3 flex flex-wrap items-end gap-2">
               <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-sm" />
               <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-sm">
                 {EXPENSE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
+              <select value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value })} className="max-w-[12rem] rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-sm" title="Link this expense to a product (optional)">
+                <option value="">(no item)</option>
+                {items.map((i) => <option key={i.id} value={i.id}>{i.title}</option>)}
+              </select>
               <input type="number" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="$" className="w-24 rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-sm" />
-              <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="note (optional)" className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-sm" />
+              <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="note (optional)" className="min-w-[8rem] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-sm" />
               <button onClick={addExpense} disabled={!Number(form.amount)} className="rounded-full bg-forest-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest-700 disabled:opacity-40">Add</button>
             </div>
             {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
@@ -206,6 +211,9 @@ export default function Books({ items, userId }) {
                   <div key={e.id} className="flex items-center gap-2 py-1.5 text-sm">
                     <span className="w-20 shrink-0 text-xs text-slate-400">{e.date}</span>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{expenseLabel(e.category)}</span>
+                    {e.itemId && itemsById[e.itemId] && (
+                      <span className="max-w-[10rem] truncate rounded-full bg-forest-50 px-2 py-0.5 text-[11px] font-medium text-forest-700">🔗 {itemsById[e.itemId]}</span>
+                    )}
                     <span className="truncate text-slate-600">{e.note}</span>
                     <span className="ml-auto font-semibold tabular-nums text-slate-900">{currency(e.amount)}</span>
                     <button onClick={() => removeExpense(e.id)} className="rounded-full px-1.5 text-slate-400 transition hover:text-rose-500" aria-label="Delete">×</button>

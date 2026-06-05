@@ -5,7 +5,9 @@ export const EXPENSE_CATEGORIES = [
   { id: 'supplies', label: 'Supplies & packaging' },
   { id: 'shipping', label: 'Shipping & postage' },
   { id: 'fees', label: 'Platform / store fees' },
-  { id: 'vehicle', label: 'Vehicle / gas' },
+  { id: 'travel', label: 'Travel / mileage' },
+  { id: 'repair', label: 'Repairs & parts' },
+  { id: 'taxes', label: 'Taxes & licenses' },
   { id: 'equipment', label: 'Tools & equipment' },
   { id: 'software', label: 'Software & subscriptions' },
   { id: 'office', label: 'Home office' },
@@ -14,7 +16,7 @@ export const EXPENSE_CATEGORIES = [
 export const expenseLabel = (id) => EXPENSE_CATEGORIES.find((c) => c.id === id)?.label || 'Other'
 
 function fromRow(r) {
-  return { id: r.id, date: r.date, category: r.category, amount: Number(r.amount) || 0, note: r.note || '' }
+  return { id: r.id, date: r.date, category: r.category, amount: Number(r.amount) || 0, note: r.note || '', itemId: r.item_id || null }
 }
 
 // Returns { expenses, available } — `available:false` means the table isn't
@@ -31,10 +33,22 @@ export async function loadExpenses(userId) {
   return { expenses: (data || []).map(fromRow), available: true }
 }
 
-export async function createExpense(userId, { date, category, amount, note }) {
+// Expenses tied to one item (for the item view + its true net).
+export async function loadItemExpenses(userId, itemId) {
   const { data, error } = await supabase
     .from('expenses')
-    .insert({ user_id: userId, date, category, amount, note: note || '' })
+    .select('*')
+    .eq('user_id', userId)
+    .eq('item_id', itemId)
+    .order('date', { ascending: false })
+  if (error) return []
+  return (data || []).map(fromRow)
+}
+
+export async function createExpense(userId, { date, category, amount, note, itemId = null }) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .insert({ user_id: userId, date, category, amount, note: note || '', item_id: itemId })
     .select()
     .single()
   if (error) throw error

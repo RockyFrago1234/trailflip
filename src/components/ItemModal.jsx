@@ -16,6 +16,7 @@ import {
 import { fileToResizedDataURL } from '../lib/resizeImage'
 import { cleanWhiteBg } from '../lib/cleanupPhoto'
 import { supabase } from '../lib/supabase'
+import { loadItemExpenses, createExpense, deleteExpense, EXPENSE_CATEGORIES, expenseLabel } from '../lib/expenses'
 
 const FIELD =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-forest-400 focus:bg-white focus:ring-2 focus:ring-forest-100'
@@ -71,6 +72,9 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
   const [payBusy, setPayBusy] = useState(false)
   const [payLink, setPayLink] = useState('')
   const [ebayUrl, setEbayUrl] = useState('')
+  const [itemExpenses, setItemExpenses] = useState([])
+  const [expForm, setExpForm] = useState({ category: 'repair', amount: '', note: '' })
+  const [expBusy, setExpBusy] = useState(false)
 
   const photoInput = useRef(null)
 
@@ -83,6 +87,15 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
       document.body.style.overflow = ''
     }
   }, [onClose, busy])
+
+  useEffect(() => {
+    if (!userId) return
+    let active = true
+    loadItemExpenses(userId, item.id).then((rows) => active && setItemExpenses(rows))
+    return () => {
+      active = false
+    }
+  }, [userId, item.id])
 
   async function patchItem(label, patch, successNote) {
     setBusy(label)
@@ -360,6 +373,31 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
     }
   }
 
+  async function addItemExpense() {
+    const amount = Number(expForm.amount)
+    if (!amount || amount <= 0) return
+    setExpBusy(true)
+    setError('')
+    try {
+      const e = await createExpense(userId, { date: todayStr(), category: expForm.category, amount, note: expForm.note, itemId: item.id })
+      setItemExpenses((prev) => [e, ...prev])
+      setExpForm({ category: expForm.category, amount: '', note: '' })
+    } catch (err) {
+      setError(err.message || 'Could not add expense.')
+    } finally {
+      setExpBusy(false)
+    }
+  }
+
+  async function removeItemExpense(id) {
+    setItemExpenses((prev) => prev.filter((e) => e.id !== id))
+    try {
+      await deleteExpense(id)
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function rewriteFromPhotos() {
     if (!item.photos.length) return
     setBusy('draft')
@@ -424,6 +462,8 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
       setBusy('')
     }
   }
+
+  const itemExpenseTotal = itemExpenses.reduce((s, e) => s + (e.amount || 0), 0)
 
   const btn = 'rounded-full px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40'
   const primary = `${btn} bg-forest-600 text-white hover:bg-forest-700`
@@ -524,9 +564,9 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
               <Stat label="MSRP" value={currency(item.msrp)} />
               <Stat label="Used value" value={item.usedLow != null || item.usedHigh != null ? `${currency(item.usedLow)}–${currency(item.usedHigh)}` : '—'} />
               {item.status === 'sold' ? (
-                <Stat label="Net profit" value={`${math.realized >= 0 ? '+' : ''}${currency(math.realized)}`} highlight />
+                <Stat label="Net profit" value={`${math.realized - itemExpenseTotal >= 0 ? '+' : ''}${currency(math.realized - itemExpenseTotal)}`} highlight />
               ) : item.status === 'owned' || item.status === 'listed' ? (
-                <Stat label="Est. profit" value={`+${currency(math.projected)}`} highlight />
+                <Stat label="Est. profit" value={`+${currency(math.projected - itemExpenseTotal)}`} highlight />
               ) : (
                 <Stat label="Potential" value={math.spread > 0 ? `+${currency(math.spread)}` : '—'} highlight />
               )}
@@ -540,6 +580,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
               {item.soldPrice != null && <span>Sold <b className="text-slate-900">{currency(item.soldPrice)}</b></span>}
               {item.status === 'sold' && math.costs > 0 && <span>Costs <b className="text-slate-900">{currency(math.costs)}</b></span>}
               {item.status === 'sold' && math.mileageDeduction > 0 && <span>Mileage ded. <b className="text-slate-900">{currency(math.mileageDeduction)}</b></span>}
+              {itemExpenseTotal > 0 && <span>Item expenses <b className="text-slate-900">{currency(itemExpenseTotal)}</b></span>}
               {math.holdDays != null && <span>Held <b className="text-slate-900">{math.holdDays}d</b></span>}
             </div>
 
@@ -863,6 +904,36 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
                   className="w-28 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs outline-none focus:border-forest-400 focus:bg-white"
                 />
               </div>
+            </div>
+
+            {/* ---- Item expenses (travel / repair / taxes tied to this product) ---- */}
+            <div className="mt-4 rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-slate-900">🧾 Item expenses</p>
+                {itemExpenseTotal > 0 && <span className="text-sm font-bold text-slate-900">{currency(itemExpenseTotal)}</span>}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Costs tied to this product — travel to grab it, repairs/parts, taxes. They lower this item’s net and show up in your Books.</p>
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <select value={expForm.category} onChange={(e) => setExpForm({ ...expForm, category: e.target.value })} className={`${FIELD} max-w-[10rem]`}>
+                  {EXPENSE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+                <input type="number" min="0" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} placeholder="$" className={`${FIELD} w-24`} />
+                <input value={expForm.note} onChange={(e) => setExpForm({ ...expForm, note: e.target.value })} placeholder="note (optional)" className={`${FIELD} min-w-[8rem] flex-1`} />
+                <button onClick={addItemExpense} disabled={expBusy || !Number(expForm.amount)} className={ghost}>{expBusy ? 'Adding…' : 'Add'}</button>
+              </div>
+              {itemExpenses.length > 0 && (
+                <div className="mt-3 divide-y divide-slate-50">
+                  {itemExpenses.map((e) => (
+                    <div key={e.id} className="flex items-center gap-2 py-1.5 text-sm">
+                      <span className="w-20 shrink-0 text-xs text-slate-400">{e.date}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{expenseLabel(e.category)}</span>
+                      <span className="truncate text-slate-600">{e.note}</span>
+                      <span className="ml-auto font-semibold tabular-nums text-slate-900">{currency(e.amount)}</span>
+                      <button onClick={() => removeItemExpense(e.id)} className="rounded-full px-1.5 text-slate-400 transition hover:text-rose-500" aria-label="Delete">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* ---- Saved evaluation ---- */}
