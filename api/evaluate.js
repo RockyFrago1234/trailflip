@@ -157,6 +157,13 @@ export default async function handler(req, res) {
       }
     }
 
+    // Direct image-URL path (e.g. an uploaded screenshot stored in Supabase) —
+    // lets the comparison tool re-appraise a saved candidate any time.
+    if (!imageBlock && body.imageUrl) {
+      const img = await fetchImageAsBase64(body.imageUrl)
+      if (img) imageBlock = { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } }
+    }
+
     // URL path
     if (body.url) {
       let listing

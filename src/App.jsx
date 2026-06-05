@@ -12,6 +12,7 @@ import PostListingModal from './components/PostListingModal'
 import AuthModal from './components/AuthModal'
 import EvaluatorModal from './components/EvaluatorModal'
 import Catalogue from './components/Catalogue'
+import Compare from './components/Compare'
 import Footer from './components/Footer'
 import { loadItems } from './lib/items'
 import { fileToResizedDataURL } from './lib/resizeImage'
@@ -372,6 +373,8 @@ export default function App() {
           onScan={openEvaluator}
           onEvaluateUrl={evaluateUrl}
         />
+      ) : effectiveView === 'compare' ? (
+        <Compare userId={user?.id} />
       ) : (
         <>
           <Hero stats={stats} onPost={openPost} onBrowse={scrollToBrowse} />
