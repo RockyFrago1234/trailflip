@@ -179,9 +179,13 @@ export default function App() {
     const e = new URLSearchParams(window.location.search).get('ebay')
     if (!e) return
     window.history.replaceState({}, '', '/')
-    Promise.resolve().then(() =>
-      setToast(e === 'connected' ? 'eBay connected — you can list with one click 🎉' : 'eBay connection failed — please try again.'),
-    )
+    const msg =
+      e === 'connected'
+        ? 'eBay connected — you can list with one click 🎉'
+        : e === 'notconfigured'
+          ? "eBay isn't set up on the server yet — add the eBay API keys, then reconnect."
+          : 'eBay connection failed — please try again.'
+    Promise.resolve().then(() => setToast(msg))
   }, [])
 
   useEffect(() => {

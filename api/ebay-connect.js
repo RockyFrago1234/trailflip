@@ -3,16 +3,20 @@
 
 import { EBAY_SCOPES } from '../lib/ebayServer.js'
 
+const APP = 'https://trailflip.vercel.app'
+
 export default function handler(req, res) {
   const id = process.env.EBAY_APP_ID
   const ru = process.env.EBAY_REDIRECT_URI // the eBay "RuName" for this app
   if (!id || !ru) {
-    res.status(200).send('eBay listing isn’t configured yet (set EBAY_APP_ID, EBAY_CERT_ID and EBAY_REDIRECT_URI).')
+    res.writeHead(302, { Location: `${APP}/?ebay=notconfigured` })
+    res.end()
     return
   }
   const uid = req.query?.uid
   if (!uid) {
-    res.status(400).send('Missing user id.')
+    res.writeHead(302, { Location: `${APP}/?ebay=error` })
+    res.end()
     return
   }
   const url =
