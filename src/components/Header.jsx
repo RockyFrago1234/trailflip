@@ -7,7 +7,7 @@ function initials(name = '') {
   return (parts.map((p) => p[0]).slice(0, 2).join('') || name[0] || 'U').toUpperCase()
 }
 
-export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost, onHome, onLogin, onEvaluate }) {
+export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost, onHome, onLogin, onEvaluate, view, onView }) {
   const { user, displayName, signOut } = useAuth()
   const [menu, setMenu] = useState(false)
 
@@ -21,48 +21,73 @@ export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost
           </span>
         </button>
 
-        <div className="relative flex-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-            <Search />
-          </span>
-          <input
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="Search gear — bikes, tents, skis…"
-            className="w-full rounded-full border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm outline-none transition focus:border-forest-400 focus:bg-white focus:ring-2 focus:ring-forest-100"
-          />
-        </div>
+        {user && (
+          <div className="flex shrink-0 gap-1 rounded-full bg-slate-100 p-1">
+            <button
+              onClick={() => onView('catalogue')}
+              className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${view === 'catalogue' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <span className="sm:hidden">🧰</span><span className="hidden sm:inline">🧰 Catalogue</span>
+            </button>
+            <button
+              onClick={() => onView('market')}
+              className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${view === 'market' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <span className="sm:hidden">🛒</span><span className="hidden sm:inline">🛒 Market</span>
+            </button>
+          </div>
+        )}
 
-        <button
-          onClick={onOpenSaved}
-          className="relative hidden shrink-0 rounded-full p-2 text-slate-600 transition hover:bg-slate-100 sm:block"
-          title="Saved gear"
-          aria-label="Saved gear"
-        >
-          <Heart filled={savedCount > 0} />
-          {savedCount > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-              {savedCount}
+        {view === 'market' ? (
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              <Search />
             </span>
-          )}
-        </button>
+            <input
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder="Search gear — bikes, tents, skis…"
+              className="w-full rounded-full border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm outline-none transition focus:border-forest-400 focus:bg-white focus:ring-2 focus:ring-forest-100"
+            />
+          </div>
+        ) : (
+          <div className="flex-1" />
+        )}
+
+        {view === 'market' && (
+          <button
+            onClick={onOpenSaved}
+            className="relative hidden shrink-0 rounded-full p-2 text-slate-600 transition hover:bg-slate-100 sm:block"
+            title="Saved gear"
+            aria-label="Saved gear"
+          >
+            <Heart filled={savedCount > 0} />
+            {savedCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                {savedCount}
+              </span>
+            )}
+          </button>
+        )}
 
         <button
           onClick={onEvaluate}
           className="shrink-0 rounded-full bg-trail-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-trail-600"
-          title="Evaluate a deal with AI"
+          title="Scan a deal with AI"
         >
           <span className="sm:hidden">✨</span>
-          <span className="hidden sm:inline">✨ Evaluate</span>
+          <span className="hidden sm:inline">✨ Scan</span>
         </button>
 
-        <button
-          onClick={onPost}
-          className="shrink-0 rounded-full bg-forest-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-700"
-        >
-          <span className="sm:hidden">+ Post</span>
-          <span className="hidden sm:inline">+ Post listing</span>
-        </button>
+        {view === 'market' && (
+          <button
+            onClick={onPost}
+            className="shrink-0 rounded-full bg-forest-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-700"
+          >
+            <span className="sm:hidden">+ Post</span>
+            <span className="hidden sm:inline">+ Post listing</span>
+          </button>
+        )}
 
         {user ? (
           <div className="relative shrink-0">

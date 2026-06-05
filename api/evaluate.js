@@ -14,7 +14,7 @@ Scrub every useful detail from the provided image and/or listing text. Be specif
 function buildUserText({ note, price, hasImage, hasListing }) {
   let t = `Evaluate this outdoor-gear listing for a potential flip.`
   if (hasImage && hasListing) t += ` You have both a photo and the listing's page text below.`
-  else if (hasImage) t += ` You have a photo of the item (it may be a marketplace screenshot — read any visible asking price).`
+  else if (hasImage) t += ` You have a photo — it may be a marketplace screenshot (read any visible asking price) or a photo of a real item in front of the buyer (e.g. at a garage sale or thrift store, possibly with no price tag).`
   else if (hasListing) t += ` You have the listing's page text below.`
   if (price) t += `\n\nThe buyer says the asking price is about $${price}.`
   if (note) t += `\n\nBuyer's note: ${note}`
