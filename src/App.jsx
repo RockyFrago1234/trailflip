@@ -423,6 +423,7 @@ export default function App() {
           onScan={openEvaluator}
           onEvaluateUrl={evaluateUrl}
           onOpenCompare={openComparison}
+          onOpenBooks={() => setView('books')}
           itemExpenseMap={itemExpenseMap}
           onExpensesChanged={refreshExpenseMap}
         />

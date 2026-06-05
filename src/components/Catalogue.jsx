@@ -6,7 +6,7 @@ import { STATUS_META } from '../lib/items'
 import { loadSearches, createSearch, deleteSearch, marketplaceLinks } from '../lib/searches'
 import { loadBoards, addToBoard, candidateFromItem } from '../lib/compare'
 import { aging, AGING_RANK, AGING_STYLE } from '../utils/aging'
-import { currency, portfolio, toCSV, effectiveScore } from '../utils/format'
+import { currency, portfolio, realizedThisMonth, toCSV, effectiveScore } from '../utils/format'
 
 const FOLDERS = [
   { id: 'all', label: 'All', emoji: '🧰', test: () => true },
@@ -27,8 +27,9 @@ const SCORE_BANDS = Array.from({ length: 10 }, (_, i) => ({
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
-function PnL({ items, expenseMap }) {
+function PnL({ items, expenseMap, onOpenBooks }) {
   const p = portfolio(items, expenseMap)
+  const tm = realizedThisMonth(items, expenseMap)
   const cells = [
     { label: 'Tied up', value: currency(p.tiedUp) },
     { label: 'Net profit', value: `${p.realized >= 0 ? '+' : ''}${currency(p.realized)}`, good: true },
@@ -38,18 +39,29 @@ function PnL({ items, expenseMap }) {
     { label: 'Avg hold', value: p.avgHold != null ? `${p.avgHold}d` : '—' },
   ]
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-      {cells.map((c) => (
-        <div key={c.label} className="rounded-2xl border border-slate-200 bg-white p-3">
-          <p className="text-[11px] uppercase tracking-wide text-slate-400">{c.label}</p>
-          <p className={`text-lg font-extrabold ${c.good ? 'text-forest-700' : 'text-slate-900'}`}>{c.value}</p>
-        </div>
-      ))}
-    </div>
+    <>
+      {onOpenBooks && (
+        <button onClick={onOpenBooks} className="mb-2 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-left transition hover:border-forest-300 hover:bg-forest-50/40">
+          <span aria-hidden>📅</span>
+          <span className="text-sm text-slate-600">
+            This month: <b className={tm.total >= 0 ? 'text-forest-700' : 'text-rose-600'}>{tm.total >= 0 ? '+' : ''}{currency(tm.total)}</b> net{tm.count ? ` · ${tm.count} sold` : ''}
+          </span>
+          <span className="ml-auto text-xs font-semibold text-forest-700">Full books →</span>
+        </button>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {cells.map((c) => (
+          <div key={c.label} className="rounded-2xl border border-slate-200 bg-white p-3">
+            <p className="text-[11px] uppercase tracking-wide text-slate-400">{c.label}</p>
+            <p className={`text-lg font-extrabold ${c.good ? 'text-forest-700' : 'text-slate-900'}`}>{c.value}</p>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
 
-export default function Catalogue({ items, userId, onItemChange, onItemDelete, onItemAdd, onScan, onEvaluateUrl, onOpenCompare, itemExpenseMap = {}, onExpensesChanged }) {
+export default function Catalogue({ items, userId, onItemChange, onItemDelete, onItemAdd, onScan, onEvaluateUrl, onOpenCompare, onOpenBooks, itemExpenseMap = {}, onExpensesChanged }) {
   const [folder, setFolder] = useState('all')
   const [tag, setTag] = useState(null)
   const [scoreBand, setScoreBand] = useState(null)
@@ -194,7 +206,7 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
 
       {items.length > 0 && (
         <div className="mt-5">
-          <PnL items={items} expenseMap={itemExpenseMap} />
+          <PnL items={items} expenseMap={itemExpenseMap} onOpenBooks={onOpenBooks} />
         </div>
       )}
 

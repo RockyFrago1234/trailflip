@@ -136,6 +136,24 @@ export function portfolio(items, expenseMap = {}) {
   }
 }
 
+// Net profit realized in the current calendar month (expense-aware) + count.
+export function realizedThisMonth(items, expenseMap = {}) {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  let total = 0
+  let count = 0
+  for (const it of items) {
+    if (it.status !== 'sold' || !it.soldAt) continue
+    const d = new Date(it.soldAt)
+    if (d.getFullYear() === y && d.getMonth() === m) {
+      total += itemMath(it, expenseMap[it.id] || 0).realized
+      count += 1
+    }
+  }
+  return { total: Math.round(total), count }
+}
+
 function csvCell(v) {
   if (v == null) return ''
   const s = String(v)
