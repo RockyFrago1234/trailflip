@@ -12,7 +12,15 @@ Weigh every factor that matters for this decision:
 - Reliability, demand, and rarity.
 - Overall risk of the deal.
 
-Rank them from best to worst. Give each a 0–100 "buy score" for THIS buyer (100 = grab it now). Be decisive and concrete — name the specific reasons. Pick one top recommendation. Call out anything that should be avoided. Use the buyer's stated goal/criteria if given.`
+Rank them from best to worst. Give each a 0–100 "buy score" for THIS buyer (100 = grab it now). Be decisive and concrete — name the specific reasons. Pick one top recommendation. Call out anything that should be avoided. Use the buyer's stated goal/criteria if given.
+
+Also identify the 3–6 SPEC DIMENSIONS that matter most for comparing THIS kind of item, and report each candidate's value for them. Use the SAME labels for every candidate, and "—" when a value is unknown. Examples:
+- Bikes: Frame size, Wheel size, Frame material, Groupset, Suspension travel, Weight
+- Smartwatches: Battery life, Case size, GPS, Cellular, Health sensors
+- Apparel/footwear: Size, Material, Fit, Color
+- Skis/snowboards: Length, Waist width, Flex, Binding
+- Tents/sleeping bags: Capacity, Season, Packed weight, Temp rating
+Pick whatever dimensions a real buyer of that item would weigh.`
 
 const TOOL = {
   name: 'report_comparison',
@@ -23,6 +31,11 @@ const TOOL = {
     properties: {
       overall: { type: 'string', description: '2–4 sentences: which to buy and why, plus anything to avoid.' },
       best_id: { type: 'string', description: 'The id of the single best pick.' },
+      spec_keys: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '3–6 spec dimensions most useful for comparing THIS kind of item, in priority order (e.g. bikes: Frame size, Wheel size, Groupset). Use these exact labels for every candidate.',
+      },
       rankings: {
         type: 'array',
         description: 'Every candidate, ranked.',
@@ -37,12 +50,25 @@ const TOOL = {
             pros: { type: 'array', items: { type: 'string' } },
             cons: { type: 'array', items: { type: 'string' } },
             risk: { type: 'string', enum: ['low', 'medium', 'high'] },
+            specs: {
+              type: 'array',
+              description: 'One entry per spec_keys label (same order); value is "—" if unknown.',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  label: { type: 'string' },
+                  value: { type: 'string' },
+                },
+                required: ['label', 'value'],
+              },
+            },
           },
-          required: ['id', 'rank', 'rating', 'verdict', 'pros', 'cons', 'risk'],
+          required: ['id', 'rank', 'rating', 'verdict', 'pros', 'cons', 'risk', 'specs'],
         },
       },
     },
-    required: ['overall', 'best_id', 'rankings'],
+    required: ['overall', 'best_id', 'spec_keys', 'rankings'],
   },
 }
 

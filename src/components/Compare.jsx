@@ -103,20 +103,30 @@ function CandidateCard({ c, isBest, onPatch, onRemove }) {
               </ul>
             </div>
           )}
+          {ai.specs?.some((s) => s.value && s.value !== '—') && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {ai.specs.filter((s) => s.value && s.value !== '—').map((s, i) => (
+                <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                  <b className="font-semibold text-slate-700">{s.label}:</b> {s.value}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-function CompareTable({ candidates, bestId }) {
+function CompareTable({ candidates, bestId, specKeys = [] }) {
+  const headers = ['Listing', 'Price', 'Location', 'Condition', ...specKeys, 'Resale', 'Flip', 'Rating', 'Rank']
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
       <table className="w-full min-w-[36rem] text-left text-sm">
         <thead className="border-b border-slate-100 text-[11px] uppercase tracking-wide text-slate-400">
           <tr>
-            {['Listing', 'Price', 'Location', 'Condition', 'Resale', 'Flip', 'Rating', 'Rank'].map((h) => (
-              <th key={h} className="px-3 py-2 font-semibold">{h}</th>
+            {headers.map((h, i) => (
+              <th key={i} className="px-3 py-2 font-semibold">{h}</th>
             ))}
           </tr>
         </thead>
@@ -124,12 +134,16 @@ function CompareTable({ candidates, bestId }) {
           {candidates.map((c) => {
             const e = c.evaluation
             const best = c.id === bestId
+            const specMap = Object.fromEntries((c.ai?.specs || []).map((s) => [s.label, s.value]))
             return (
               <tr key={c.id} className={`border-b border-slate-50 ${best ? 'bg-forest-50' : ''}`}>
                 <td className="max-w-[12rem] truncate px-3 py-2 font-medium text-slate-800">{best ? '⭐ ' : ''}{c.title}</td>
                 <td className="px-3 py-2 font-semibold">{c.price != null ? currency(c.price) : '—'}</td>
                 <td className="px-3 py-2 text-slate-600">{c.location || '—'}</td>
                 <td className="px-3 py-2 text-slate-600">{c.condition || '—'}</td>
+                {specKeys.map((k) => (
+                  <td key={k} className="px-3 py-2 text-slate-600">{specMap[k] || '—'}</td>
+                ))}
                 <td className="px-3 py-2 text-slate-600">{evalValue(e) != null ? currency(evalValue(e)) : '—'}</td>
                 <td className="px-3 py-2">{e?.deal_score ?? '—'}</td>
                 <td className="px-3 py-2 font-bold">{c.ai?.rating ?? '—'}</td>
@@ -364,7 +378,7 @@ export default function Compare({ userId, openBoardId = null }) {
           {active.candidates.length >= 2 && (
             <div className="mt-5">
               <p className="mb-2 text-sm font-bold text-slate-900">Side by side</p>
-              <CompareTable candidates={sorted} bestId={active.result?.bestId} />
+              <CompareTable candidates={sorted} bestId={active.result?.bestId} specKeys={active.result?.specKeys || []} />
             </div>
           )}
         </>

@@ -142,5 +142,5 @@ export async function runComparison(board, { onProgress, dataUrls = {} } = {}) {
     .map((c) => ({ ...c, ai: byId[c.id] || null }))
     .sort((a, b) => (a.ai?.rank ?? 99) - (b.ai?.rank ?? 99))
 
-  return { candidates: ranked, result: { overall: data.overall, bestId: data.best_id, ts: Date.now() } }
+  return { candidates: ranked, result: { overall: data.overall, bestId: data.best_id, specKeys: data.spec_keys || [], ts: Date.now() } }
 }
