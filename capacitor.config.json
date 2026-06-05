@@ -1,0 +1,9 @@
+{
+  "appId": "com.trailflip.app",
+  "appName": "TrailFlip",
+  "webDir": "dist",
+  "server": {
+    "url": "https://trailflip.vercel.app",
+    "cleartext": false
+  }
+}
