@@ -245,6 +245,16 @@ export default function App() {
     setShowEvaluator(true)
   }
 
+  // Open the AI evaluator pre-loaded with a marketplace URL (from the scanner).
+  function evaluateUrl(url) {
+    if (!user) {
+      requireAuth('Log in to evaluate deals.')
+      return
+    }
+    setShareInit({ image: null, url })
+    setShowEvaluator(true)
+  }
+
   async function addListing(listing) {
     setShowPost(false)
     if (isSupabaseConfigured && user) {
@@ -358,7 +368,9 @@ export default function App() {
           userId={user?.id}
           onItemChange={changeItem}
           onItemDelete={removeItem}
+          onItemAdd={addItem}
           onScan={openEvaluator}
+          onEvaluateUrl={evaluateUrl}
         />
       ) : (
         <>

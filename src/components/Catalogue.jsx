@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import ItemCard from './ItemCard'
 import ItemModal from './ItemModal'
+import DealScanner from './DealScanner'
 import { STATUS_META } from '../lib/items'
 import { loadSearches, createSearch, deleteSearch, marketplaceLinks } from '../lib/searches'
 import { currency, portfolio, toCSV, effectiveScore } from '../utils/format'
@@ -46,12 +47,13 @@ function PnL({ items }) {
   )
 }
 
-export default function Catalogue({ items, userId, onItemChange, onItemDelete, onScan }) {
+export default function Catalogue({ items, userId, onItemChange, onItemDelete, onItemAdd, onScan, onEvaluateUrl }) {
   const [folder, setFolder] = useState('all')
   const [tag, setTag] = useState(null)
   const [scoreBand, setScoreBand] = useState(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
+  const [scanHunt, setScanHunt] = useState(null)
 
   // Saved "deal hunts"
   const [searches, setSearches] = useState([])
@@ -159,9 +161,14 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
       <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between">
           <p className="text-sm font-bold text-slate-900">🔭 Deal hunts</p>
-          <button onClick={() => setAddingHunt((v) => !v)} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200">
-            {addingHunt ? 'Cancel' : '+ New hunt'}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setScanHunt({ query: hunt.query, maxPrice: hunt.maxPrice })} className="rounded-full bg-trail-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-trail-600">
+              ⚡ Scan eBay
+            </button>
+            <button onClick={() => setAddingHunt((v) => !v)} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200">
+              {addingHunt ? 'Cancel' : '+ New hunt'}
+            </button>
+          </div>
         </div>
         {addingHunt && (
           <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -171,7 +178,7 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
           </div>
         )}
         {searches.length === 0 ? (
-          <p className="mt-2 text-xs text-slate-500">Save the models you're hunting for — one tap searches eBay, Facebook, Craigslist &amp; OfferUp under your max price. (Auto-alerts arrive with the eBay integration.)</p>
+          <p className="mt-2 text-xs text-slate-500">Save the models you're hunting for — <span className="font-semibold text-slate-600">⚡ Scan</span> pulls live eBay results right here, and the marketplace links open Facebook/Craigslist/OfferUp under your max price.</p>
         ) : (
           <div className="mt-3 space-y-2">
             {searches.map((s) => (
@@ -179,6 +186,7 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
                 <span className="text-sm font-semibold text-slate-800">{s.query}</span>
                 {s.maxPrice != null && <span className="text-xs text-slate-500">under {currency(s.maxPrice)}</span>}
                 <div className="ml-auto flex flex-wrap gap-1.5">
+                  <button onClick={() => setScanHunt({ query: s.query, maxPrice: s.maxPrice })} className="rounded-full bg-trail-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-trail-600">⚡ Scan</button>
                   {marketplaceLinks(s).map((l) => (
                     <a key={l.name} href={l.url} target="_blank" rel="noopener noreferrer" className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-forest-700 ring-1 ring-slate-200 transition hover:bg-forest-50">{l.name} ↗</a>
                   ))}
@@ -289,6 +297,16 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
             onItemDelete(id)
             setSelectedId(null)
           }}
+        />
+      )}
+
+      {scanHunt && (
+        <DealScanner
+          hunt={scanHunt}
+          userId={userId}
+          onClose={() => setScanHunt(null)}
+          onEvaluateUrl={onEvaluateUrl}
+          onSaved={(item) => onItemAdd?.(item)}
         />
       )}
     </section>
