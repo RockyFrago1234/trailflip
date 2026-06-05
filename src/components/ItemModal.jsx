@@ -191,6 +191,11 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
     }
   }
 
+  function setCover(url) {
+    if (!url || item.photos[0] === url) return
+    patchItem('cover', { photos: [url, ...item.photos.filter((u) => u !== url)] }, 'Cover photo updated — it leads your listing now.')
+  }
+
   function removePhoto(url, which) {
     const key = which === 'official' ? 'officialPhotos' : which === 'representative' ? 'representativePhotos' : 'photos'
     patchItem('photos', { [key]: item[key].filter((u) => u !== url) })
@@ -797,7 +802,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
               {gallery.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {item.photos.map((u) => (
-                    <Thumb key={u} url={u} onRemove={() => removePhoto(u, 'mine')} onClean={() => cleanPhoto(u)} cleaning={busy === 'clean'} />
+                    <Thumb key={u} url={u} isCover={u === item.photos[0]} onCover={() => setCover(u)} onRemove={() => removePhoto(u, 'mine')} onClean={() => cleanPhoto(u)} cleaning={busy === 'clean'} />
                   ))}
                   {item.officialPhotos.map((u) => (
                     <Thumb key={u} url={u} badge="official" onRemove={() => removePhoto(u, 'official')} />
@@ -963,11 +968,21 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
   )
 }
 
-function Thumb({ url, badge, onRemove, onClean, cleaning }) {
+function Thumb({ url, badge, onRemove, onClean, cleaning, onCover, isCover }) {
   return (
-    <div className="relative h-20 w-20 overflow-hidden rounded-xl border border-slate-200">
+    <div className={`relative h-20 w-20 overflow-hidden rounded-xl border ${isCover ? 'border-forest-500 ring-2 ring-forest-200' : 'border-slate-200'}`}>
       <img src={url} alt="" className="h-full w-full object-cover" />
       {badge && <span className="absolute bottom-0 left-0 right-0 bg-black/55 py-0.5 text-center text-[9px] font-semibold uppercase text-white">{badge}</span>}
+      {(onCover || isCover) && (
+        <button
+          onClick={isCover ? undefined : onCover}
+          disabled={isCover}
+          className={`absolute left-0.5 top-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold shadow transition ${isCover ? 'bg-forest-600 text-white' : 'bg-white/90 text-slate-700 hover:bg-white'}`}
+          title={isCover ? 'Cover photo' : 'Make this the cover photo'}
+        >
+          {isCover ? '★ cover' : '☆ cover'}
+        </button>
+      )}
       <button onClick={onRemove} className="absolute right-0.5 top-0.5 grid h-5 w-5 place-items-center rounded-full bg-white/90 text-xs text-slate-700 shadow" aria-label="Remove photo">×</button>
       {onClean && (
         <button
