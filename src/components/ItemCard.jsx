@@ -2,6 +2,7 @@ import ImagePlaceholder from './ImagePlaceholder'
 import { getCategory } from '../data/listings'
 import { STATUS_META } from '../lib/items'
 import { currency, itemMath, effectiveScore } from '../utils/format'
+import { aging, AGING_STYLE } from '../utils/aging'
 
 function MoneyLine({ item }) {
   const m = itemMath(item)
@@ -54,6 +55,7 @@ export default function ItemCard({ item, onOpen, selectable = false, selected = 
   const meta = STATUS_META[item.status] || STATUS_META.prospect
   const score = effectiveScore(item)
   const boosted = score != null && item.flipScore != null && score > item.flipScore
+  const age = aging(item)
 
   return (
     <article
@@ -96,6 +98,11 @@ export default function ItemCard({ item, onOpen, selectable = false, selected = 
         <div className="mt-1.5">
           <MoneyLine item={item} />
         </div>
+        {age.holdDays != null && age.level !== 'fresh' && (
+          <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${AGING_STYLE[age.level]}`}>
+            ⏳ {age.holdDays}d{age.level === 'cold' ? ' · cold' : age.level === 'stale' ? ' · stale' : ''}
+          </span>
+        )}
         {item.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {item.tags.slice(0, 3).map((t) => (

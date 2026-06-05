@@ -5,6 +5,7 @@ import DealScanner from './DealScanner'
 import { STATUS_META } from '../lib/items'
 import { loadSearches, createSearch, deleteSearch, marketplaceLinks } from '../lib/searches'
 import { loadBoards, addToBoard, candidateFromItem } from '../lib/compare'
+import { aging, AGING_RANK, AGING_STYLE } from '../utils/aging'
 import { currency, portfolio, toCSV, effectiveScore } from '../utils/format'
 
 const FOLDERS = [
@@ -106,6 +107,14 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
     return [...s].sort()
   }, [items])
 
+  const attention = useMemo(() => {
+    return items
+      .filter((i) => i.status === 'owned' || i.status === 'listed')
+      .map((i) => ({ item: i, ...aging(i) }))
+      .filter((a) => a.level !== 'fresh')
+      .sort((a, b) => (AGING_RANK[b.level] - AGING_RANK[a.level]) || ((b.holdDays || 0) - (a.holdDays || 0)))
+  }, [items])
+
   const counts = useMemo(() => {
     const c = {}
     for (const f of FOLDERS) c[f.id] = items.filter(f.test).length
@@ -186,6 +195,29 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
       {items.length > 0 && (
         <div className="mt-5">
           <PnL items={items} />
+        </div>
+      )}
+
+      {attention.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <p className="text-sm font-bold text-slate-900">⏳ Needs attention <span className="font-normal text-slate-400">({attention.length})</span></p>
+          <div className="mt-2 space-y-1.5">
+            {attention.slice(0, 5).map(({ item, holdDays, level, action, suggestedPrice }) => (
+              <button
+                key={item.id}
+                onClick={() => setSelectedId(item.id)}
+                className="flex w-full items-center gap-2 rounded-xl bg-white px-3 py-2 text-left ring-1 ring-slate-100 transition hover:ring-amber-300"
+              >
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${AGING_STYLE[level]}`}>{holdDays}d</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-slate-800">{item.title}</span>
+                  <span className="block truncate text-xs text-slate-500">{action}</span>
+                </span>
+                {suggestedPrice != null && <span className="shrink-0 text-xs font-bold text-forest-700">→ {currency(suggestedPrice)}</span>}
+              </button>
+            ))}
+          </div>
+          {attention.length > 5 && <p className="mt-1.5 text-xs text-slate-400">+{attention.length - 5} more in your Owned/Listed folders</p>}
         </div>
       )}
 
