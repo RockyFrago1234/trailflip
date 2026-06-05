@@ -24,6 +24,7 @@ async function readBody(req) {
 
 const EBAY_OAUTH = 'https://api.ebay.com/identity/v1/oauth2/token'
 const EBAY_SEARCH = 'https://api.ebay.com/buy/browse/v1/item_summary/search'
+const EBAY_INSIGHTS = 'https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search'
 const EBAY_SCOPE = 'https://api.ebay.com/oauth/api_scope'
 
 // Application token, cached across warm invocations (valid ~2h).
@@ -101,9 +102,58 @@ async function scanEbay({ q, maxPrice, sort = 'newlyListed', limit = 24 }) {
   return { configured: true, listings, total: j.total ?? listings.length }
 }
 
+// eBay Marketplace Insights — recent SOLD prices + sell-through. Same app token,
+// but the keyset must be granted Marketplace Insights access (apply in the eBay
+// developer portal); until then eBay returns 403 and we surface a hint.
+async function scanEbaySold({ q, maxPrice, limit = 24 }) {
+  const token = await ebayToken()
+  if (!token) return { configured: false, listings: [] }
+
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  if (maxPrice) params.set('filter', `price:[..${Math.round(maxPrice)}],priceCurrency:USD`)
+
+  const resp = await fetch(`${EBAY_INSIGHTS}?${params}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-EBAY-C-MARKETPLACE-ID': process.env.EBAY_MARKETPLACE || 'EBAY_US',
+      'Content-Type': 'application/json',
+    },
+  })
+  if (resp.status === 403) {
+    return { configured: true, listings: [], note: "Your eBay app isn't approved for the Marketplace Insights API yet — apply for it in the eBay developer portal to unlock sold prices." }
+  }
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => '')
+    throw new Error(`eBay sold search failed (${resp.status}). ${t.slice(0, 200)}`)
+  }
+  const j = await resp.json()
+  const listings = (j.itemSales || []).map((it) => ({
+    id: it.itemId || `${it.title}-${it.lastSoldDate}`,
+    title: it.title,
+    price: it.lastSoldPrice ? Number(it.lastSoldPrice.value) : null,
+    currency: it.lastSoldPrice?.currency || 'USD',
+    url: it.itemWebUrl || null,
+    image: it.image?.imageUrl || it.thumbnailImages?.[0]?.imageUrl || null,
+    condition: it.condition || null,
+    soldDate: it.lastSoldDate || null,
+    source: 'ebay-sold',
+  }))
+  const prices = listings.map((l) => l.price).filter((n) => n != null).sort((a, b) => a - b)
+  const summary = prices.length
+    ? {
+        count: prices.length,
+        avg: Math.round(prices.reduce((s, n) => s + n, 0) / prices.length),
+        median: prices[Math.floor(prices.length / 2)],
+        low: prices[0],
+        high: prices[prices.length - 1],
+      }
+    : null
+  return { configured: true, listings, total: j.total ?? listings.length, summary }
+}
+
 // --- handler -----------------------------------------------------------------
 
-const PROVIDERS = { ebay: scanEbay }
+const PROVIDERS = { ebay: scanEbay, 'ebay-sold': scanEbaySold }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

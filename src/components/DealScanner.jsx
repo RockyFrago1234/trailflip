@@ -26,7 +26,7 @@ function SetupCard() {
   )
 }
 
-function ResultRow({ r, maxPrice, saved, saving, onSave, onEvaluate }) {
+function ResultRow({ r, maxPrice, saved, saving, onSave, onEvaluate, comps }) {
   const under = maxPrice != null && r.price != null && r.price <= maxPrice
   return (
     <div className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-3">
@@ -40,35 +40,42 @@ function ResultRow({ r, maxPrice, saved, saving, onSave, onEvaluate }) {
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-sm font-semibold text-slate-900">{r.title}</p>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-          <span className={`text-sm font-extrabold ${under ? 'text-forest-700' : 'text-slate-900'}`}>
+          <span className={`text-sm font-extrabold ${comps ? 'text-slate-900' : under ? 'text-forest-700' : 'text-slate-900'}`}>
             {r.price != null ? currency(r.price) : '—'}
           </span>
-          {r.auction && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium">auction</span>}
+          {comps && r.soldDate && <span className="font-medium text-forest-700">sold {new Date(r.soldDate).toLocaleDateString()}</span>}
+          {!comps && r.auction && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium">auction</span>}
           {r.condition && <span>{r.condition}</span>}
-          {r.where && <span className="truncate">· {r.where}</span>}
+          {!comps && r.where && <span className="truncate">· {r.where}</span>}
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <a
-            href={r.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
-          >
-            Open ↗
-          </a>
-          <button
-            onClick={() => onEvaluate(r)}
-            className="rounded-full bg-trail-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-trail-600"
-          >
-            ✨ Evaluate
-          </button>
-          <button
-            onClick={() => onSave(r)}
-            disabled={saved || saving}
-            className="rounded-full bg-forest-600 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-forest-700 disabled:opacity-50"
-          >
-            {saved ? '✓ Saved' : saving ? 'Saving…' : '+ Save'}
-          </button>
+          {r.url && (
+            <a
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
+            >
+              Open ↗
+            </a>
+          )}
+          {!comps && (
+            <>
+              <button
+                onClick={() => onEvaluate(r)}
+                className="rounded-full bg-trail-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-trail-600"
+              >
+                ✨ Evaluate
+              </button>
+              <button
+                onClick={() => onSave(r)}
+                disabled={saved || saving}
+                className="rounded-full bg-forest-600 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-forest-700 disabled:opacity-50"
+              >
+                {saved ? '✓ Saved' : saving ? 'Saving…' : '+ Save'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -79,6 +86,7 @@ export default function DealScanner({ hunt, userId, onClose, onEvaluateUrl, onSa
   const [query, setQuery] = useState(hunt?.query || '')
   const [maxPrice, setMaxPrice] = useState(hunt?.maxPrice != null ? String(hunt.maxPrice) : '')
   const [sort, setSort] = useState('newest')
+  const [tab, setTab] = useState('active') // 'active' | 'sold'
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState(null)
@@ -96,7 +104,7 @@ export default function DealScanner({ hunt, userId, onClose, onEvaluateUrl, onSa
     }
   }, [onClose])
 
-  async function runScan() {
+  async function runScan(t = tab) {
     const q = query.trim()
     if (!q || loading) return
     setLoading(true)
@@ -104,7 +112,7 @@ export default function DealScanner({ hunt, userId, onClose, onEvaluateUrl, onSa
     setData(null)
     try {
       const res = await scanMarketplace({
-        source: 'ebay',
+        source: t === 'sold' ? 'ebay-sold' : 'ebay',
         query: q,
         maxPrice: maxPrice === '' ? null : Number(maxPrice),
         sort,
@@ -182,6 +190,10 @@ export default function DealScanner({ hunt, userId, onClose, onEvaluateUrl, onSa
 
         {/* Controls */}
         <div className="border-b border-slate-100 px-5 py-4">
+          <div className="mb-3 flex gap-1 rounded-full bg-slate-100 p-1 sm:w-80">
+            <button onClick={() => { setTab('active'); runScan('active') }} className={`flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition ${tab === 'active' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>🟢 Active</button>
+            <button onClick={() => { setTab('sold'); runScan('sold') }} className={`flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition ${tab === 'sold' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>📊 Sold comps</button>
+          </div>
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex min-w-[12rem] flex-1 flex-col gap-1">
               <span className="text-xs font-medium text-slate-500">Search</span>
@@ -264,9 +276,19 @@ export default function DealScanner({ hunt, userId, onClose, onEvaluateUrl, onSa
 
           {!loading && !error && data && !data.configured && <SetupCard />}
 
-          {!loading && !error && data && data.configured && listings.length === 0 && (
+          {!loading && !error && data?.note && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{data.note}</div>
+          )}
+
+          {!loading && !error && data?.summary && (
+            <div className="rounded-2xl border border-forest-200 bg-forest-50 p-3 text-sm text-forest-900">
+              <b>Sold comps</b> · avg {currency(data.summary.avg)} · median {currency(data.summary.median)} · {currency(data.summary.low)}–{currency(data.summary.high)} · {data.summary.count} recent sales
+            </div>
+          )}
+
+          {!loading && !error && data && data.configured && listings.length === 0 && !data.note && (
             <p className="py-10 text-center text-sm text-slate-500">
-              No eBay listings{maxPrice ? ` under ${currency(Number(maxPrice))}` : ''} for “{data.query}”. Try widening the price or wording.
+              No {tab === 'sold' ? 'recent sales' : 'eBay listings'}{maxPrice ? ` under ${currency(Number(maxPrice))}` : ''} for “{data.query}”. Try widening the price or wording.
             </p>
           )}
 

@@ -66,6 +66,9 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
   const [picked, setPicked] = useState({})
   const [genBusy, setGenBusy] = useState('') // '' | 'studio' | 'representative'
   const [genImage, setGenImage] = useState(null) // { image, mode }
+  const [genNeedsKey, setGenNeedsKey] = useState(false)
+  const [payBusy, setPayBusy] = useState(false)
+  const [payLink, setPayLink] = useState('')
 
   const photoInput = useRef(null)
 
@@ -241,7 +244,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
       const data = await resp.json()
       if (!resp.ok) throw new Error(data.error || 'Image generation failed.')
       if (data.configured === false) {
-        setError('AI image generation needs an OpenAI API key (set OPENAI_API_KEY on the server).')
+        setGenNeedsKey(true)
         return
       }
       setGenImage({ image: data.image, mode: data.mode })
@@ -269,6 +272,32 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
       setError(e.message || 'Could not save the image.')
     } finally {
       setBusy('')
+    }
+  }
+
+  async function createPaymentLink() {
+    setPayBusy(true)
+    setError('')
+    try {
+      const amount = Number(item.listPrice ?? listPrice ?? 0)
+      const resp = await fetch('/api/payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title || item.title, amount }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Could not create a payment link.')
+      if (data.configured === false) {
+        setError('Payments need a Stripe key (set STRIPE_SECRET_KEY on the server).')
+        return
+      }
+      setPayLink(data.url)
+      navigator.clipboard?.writeText(data.url)
+      setNote('Payment link created & copied — send it to your buyer.')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setPayBusy(false)
     }
   }
 
@@ -621,17 +650,28 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
             {item.status === 'listed' && (
               <div className="mt-4 rounded-2xl border border-forest-200 bg-forest-50/60 p-4">
                 <p className="text-sm font-bold text-slate-900">📤 Post it everywhere</p>
-                <p className="mt-1 text-xs text-slate-500">We copy your listing — paste it into the marketplace’s form. Your photos are saved here to upload.</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Marketplaces block other sites from auto-filling their forms, so TrailFlip copies each field for you — open the site and paste (Ctrl/⌘+V) into each box. Tap a field to copy it:
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button className={ghost} onClick={() => copy(buildListingText(item), 'Full listing')}>Copy listing</button>
-                  <button className={ghost} onClick={() => copy(draft.title || item.title, 'Title')}>Copy title</button>
-                  <button className={ghost} onClick={() => copy(item.description, 'Description')}>Copy description</button>
+                  <button className={ghost} onClick={() => copy(draft.title || item.title, 'Title')}>📋 Title</button>
+                  {item.listPrice != null && <button className={ghost} onClick={() => copy(String(Math.round(item.listPrice)), 'Price')}>📋 Price</button>}
+                  <button className={ghost} onClick={() => copy(draft.description || item.description, 'Description')}>📋 Description</button>
+                  <button className={ghost} onClick={() => copy(buildListingText(item), 'Full listing')}>📋 Everything</button>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button className={accent} onClick={() => { copy(buildListingText(item), 'Listing'); window.open('https://www.facebook.com/marketplace/create/item', '_blank') }}>Facebook ↗</button>
-                  <button className={accent} onClick={() => { copy(buildListingText(item), 'Listing'); window.open('https://www.ebay.com/sl/sell', '_blank') }}>eBay ↗</button>
+                  <button className={accent} onClick={() => { copy(draft.title || item.title, 'Title'); window.open('https://www.facebook.com/marketplace/create/item', '_blank') }}>Facebook ↗</button>
+                  <button className={accent} onClick={() => { copy(draft.title || item.title, 'Title'); window.open('https://www.ebay.com/sl/sell', '_blank') }}>eBay ↗</button>
                   {typeof navigator !== 'undefined' && navigator.share && (
                     <button className={ghost} onClick={() => navigator.share({ title: item.title, text: buildListingText(item) }).catch(() => {})}>Share…</button>
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] text-slate-400">Opening Facebook/eBay copies your title first — paste it, then tap the next field above. (True one-click listing is possible on eBay via its API — ask to set it up.)</p>
+
+                <div className="mt-3 border-t border-forest-200/60 pt-3">
+                  <button className={ghost} onClick={createPaymentLink} disabled={payBusy}>{payBusy ? 'Creating…' : '💳 Create Stripe payment link'}</button>
+                  {payLink && (
+                    <a href={payLink} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-xs font-semibold text-forest-700 hover:underline">{payLink} ↗</a>
                   )}
                 </div>
               </div>
@@ -723,6 +763,12 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
                   )}
                 </div>
                 <p className="mt-1 text-[11px] text-slate-400">Studio mode re-lights your real photo into a clean catalog shot; representative mode generates a catalog image of the model (auto-disclosed as representative in your listing).</p>
+                {genNeedsKey && (
+                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <p className="font-semibold">Add an OpenAI key to turn this on</p>
+                    <p className="mt-1">Set <span className="font-mono">OPENAI_API_KEY</span> in Vercel → Settings → Environment Variables (get one at platform.openai.com → API keys), then redeploy. Costs ~a few cents per image.</p>
+                  </div>
+                )}
                 {genImage && (
                   <div className="mt-3 flex items-center gap-3">
                     <img src={genImage.image} alt="AI generated" className="h-28 w-28 rounded-xl object-cover ring-1 ring-slate-200" />
