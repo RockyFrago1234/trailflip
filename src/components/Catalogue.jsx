@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ItemCard from './ItemCard'
 import ItemModal from './ItemModal'
 import { STATUS_META } from '../lib/items'
+import { loadSearches, createSearch, deleteSearch, marketplaceLinks } from '../lib/searches'
 import { currency, portfolio, toCSV, effectiveScore } from '../utils/format'
 
 const FOLDERS = [
@@ -51,6 +52,47 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
   const [scoreBand, setScoreBand] = useState(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
+
+  // Saved "deal hunts"
+  const [searches, setSearches] = useState([])
+  const [hunt, setHunt] = useState({ query: '', maxPrice: '' })
+  const [addingHunt, setAddingHunt] = useState(false)
+
+  useEffect(() => {
+    if (!userId) return
+    let active = true
+    loadSearches(userId)
+      .then((s) => {
+        if (active) setSearches(s)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [userId])
+
+  async function addHunt(fields) {
+    const q = (fields?.query ?? hunt.query).trim()
+    if (!q) return
+    const maxPrice = fields?.maxPrice ?? (hunt.maxPrice === '' ? null : Number(hunt.maxPrice))
+    try {
+      const s = await createSearch(userId, { query: q, maxPrice })
+      setSearches((prev) => [s, ...prev.filter((x) => x.id !== s.id)])
+      setHunt({ query: '', maxPrice: '' })
+      setAddingHunt(false)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function removeHunt(id) {
+    setSearches((prev) => prev.filter((s) => s.id !== id))
+    try {
+      await deleteSearch(id)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const allTags = useMemo(() => {
     const s = new Set()
@@ -112,6 +154,41 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
           <PnL items={items} />
         </div>
       )}
+
+      {/* Deal hunts — saved multi-marketplace searches */}
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-bold text-slate-900">🔭 Deal hunts</p>
+          <button onClick={() => setAddingHunt((v) => !v)} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200">
+            {addingHunt ? 'Cancel' : '+ New hunt'}
+          </button>
+        </div>
+        {addingHunt && (
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <input value={hunt.query} onChange={(e) => setHunt({ ...hunt, query: e.target.value })} placeholder="e.g. Santa Cruz Hightower" className="min-w-[12rem] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-forest-400 focus:bg-white" />
+            <input type="number" min="0" value={hunt.maxPrice} onChange={(e) => setHunt({ ...hunt, maxPrice: e.target.value })} placeholder="max $" className="w-28 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-forest-400 focus:bg-white" />
+            <button onClick={() => addHunt()} disabled={!hunt.query.trim()} className="rounded-full bg-forest-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest-700 disabled:opacity-40">Save hunt</button>
+          </div>
+        )}
+        {searches.length === 0 ? (
+          <p className="mt-2 text-xs text-slate-500">Save the models you're hunting for — one tap searches eBay, Facebook, Craigslist &amp; OfferUp under your max price. (Auto-alerts arrive with the eBay integration.)</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {searches.map((s) => (
+              <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                <span className="text-sm font-semibold text-slate-800">{s.query}</span>
+                {s.maxPrice != null && <span className="text-xs text-slate-500">under {currency(s.maxPrice)}</span>}
+                <div className="ml-auto flex flex-wrap gap-1.5">
+                  {marketplaceLinks(s).map((l) => (
+                    <a key={l.name} href={l.url} target="_blank" rel="noopener noreferrer" className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-forest-700 ring-1 ring-slate-200 transition hover:bg-forest-50">{l.name} ↗</a>
+                  ))}
+                  <button onClick={() => removeHunt(s.id)} className="rounded-full px-2 py-1 text-xs text-slate-400 transition hover:text-rose-500" aria-label="Delete hunt">×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Folder tabs */}
       <div className="mt-5 flex flex-wrap gap-2">
@@ -207,6 +284,7 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
           userId={userId}
           onClose={() => setSelectedId(null)}
           onChange={onItemChange}
+          onWatch={addHunt}
           onDelete={(id) => {
             onItemDelete(id)
             setSelectedId(null)

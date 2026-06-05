@@ -34,7 +34,7 @@ function Stat({ label, value, highlight }) {
   )
 }
 
-export default function ItemModal({ item, userId, onClose, onChange, onDelete }) {
+export default function ItemModal({ item, userId, onClose, onChange, onDelete, onWatch }) {
   const cat = getCategory(item.category)
   const meta = STATUS_META[item.status] || STATUS_META.prospect
   const math = itemMath(item)
@@ -124,21 +124,19 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
   }
 
   function saveSold() {
-    const num = (v) => (v === '' || v == null ? null : Number(v))
-    patchItem(
-      'sold',
-      {
-        status: 'sold',
-        soldPrice: Number(sold.price) || null,
-        soldAt: new Date(sold.date).getTime(),
-        soldVia: sold.via || null,
-        fees: num(sold.fees),
-        shippingCost: num(sold.shipping),
-        suppliesCost: num(sold.supplies),
-        miles: num(sold.miles),
-      },
-      'Nice flip! Net profit logged to your books — export anytime from the catalogue.',
-    )
+    const patch = {
+      status: 'sold',
+      soldPrice: Number(sold.price) || null,
+      soldAt: new Date(sold.date).getTime(),
+      soldVia: sold.via || null,
+    }
+    // Cost fields are optional (and behind a migration) — only send when entered,
+    // so the basic sold flow works even before the migration is applied.
+    if (sold.fees !== '') patch.fees = Number(sold.fees)
+    if (sold.shipping !== '') patch.shippingCost = Number(sold.shipping)
+    if (sold.supplies !== '') patch.suppliesCost = Number(sold.supplies)
+    if (sold.miles !== '') patch.miles = Number(sold.miles)
+    patchItem('sold', patch, 'Nice flip! Net profit logged to your books — export anytime from the catalogue.')
   }
 
   async function addPhotos(files) {
@@ -304,6 +302,19 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
       actions.push(<button key="wish" className={ghost} onClick={() => patchItem('move', { status: 'wishlist' })} disabled={busy === 'move'}>⭐ Move to wishlist</button>)
     else
       actions.push(<button key="prospect" className={ghost} onClick={() => patchItem('move', { status: 'prospect' })} disabled={busy === 'move'}>🔍 Move to prospects</button>)
+    if (onWatch)
+      actions.push(
+        <button
+          key="watch"
+          className={ghost}
+          onClick={() => {
+            onWatch({ query: [item.brand, item.model, item.year].filter(Boolean).join(' ') || item.title, maxPrice: item.askingPrice ?? item.usedLow ?? null })
+            setNote('Added to your Deal hunts 🔭 — search it across marketplaces from the catalogue.')
+          }}
+        >
+          🔭 Watch for deals
+        </button>,
+      )
   } else if (item.status === 'owned') {
     actions.push(<button key="list" className={primary} onClick={() => setPanel(panel === 'list' ? null : 'list')}>🏷️ List it</button>)
     actions.push(<button key="sold" className={accent} onClick={() => setPanel(panel === 'sold' ? null : 'sold')}>💰 Mark sold</button>)
