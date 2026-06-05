@@ -1,7 +1,7 @@
 import ImagePlaceholder from './ImagePlaceholder'
 import { getCategory } from '../data/listings'
 import { STATUS_META } from '../lib/items'
-import { currency, itemMath } from '../utils/format'
+import { currency, itemMath, effectiveScore } from '../utils/format'
 
 function MoneyLine({ item }) {
   const m = itemMath(item)
@@ -52,6 +52,8 @@ export default function ItemCard({ item, onOpen }) {
   const cat = getCategory(item.category)
   const cover = item.photos[0] || item.officialPhotos[0] || null
   const meta = STATUS_META[item.status] || STATUS_META.prospect
+  const score = effectiveScore(item)
+  const boosted = score != null && item.flipScore != null && score > item.flipScore
 
   return (
     <article
@@ -69,9 +71,12 @@ export default function ItemCard({ item, onOpen }) {
           {meta.emoji} {meta.label}
         </span>
 
-        {item.flipScore != null && (
-          <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-slate-900/85 text-sm font-extrabold text-white backdrop-blur">
-            {item.flipScore}
+        {score != null && (
+          <span
+            className={`absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full text-sm font-extrabold text-white backdrop-blur ${boosted ? 'bg-forest-600/90 ring-2 ring-forest-300' : 'bg-slate-900/85'}`}
+            title={boosted ? `Flip score rose from ${item.flipScore} after buying below asking` : 'Flip score'}
+          >
+            {score}
           </span>
         )}
 

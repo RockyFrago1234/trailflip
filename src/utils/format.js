@@ -71,6 +71,31 @@ export function itemMath(item) {
   return out
 }
 
+// Cost-adjusted flip score. The evaluator's score (item.flipScore) is anchored
+// at the ASKING price; once you actually buy below asking, your real margin is
+// better, so the score rises toward 100. Score never drops below the baseline.
+// Uses a saturating curve calibrated to pass through the baseline at the asking
+// price: score(margin) = 100·margin / (margin + k).
+export function effectiveScore(item) {
+  const base = item.flipScore
+  if (base == null) return null
+  if (item.buyPrice == null || item.askingPrice == null || item.buyPrice >= item.askingPrice) return base
+
+  const resale = midValue(item)
+  if (!(resale > 0) || item.buyPrice <= 0) return base
+  const marginBuy = ((resale - item.buyPrice) / item.buyPrice) * 100
+  if (marginBuy <= 0) return base
+
+  const marginAsk = ((resale - item.askingPrice) / item.askingPrice) * 100
+  if (base <= 0 || marginAsk <= 0) {
+    // Asking was at/above resale (or no baseline) — map margin directly.
+    return Math.max(base, Math.min(99, Math.round((100 * marginBuy) / (marginBuy + 50))))
+  }
+  const k = (marginAsk * (100 - base)) / base
+  const score = (100 * marginBuy) / (marginBuy + k)
+  return Math.max(base, Math.min(100, Math.round(score)))
+}
+
 // Aggregate P&L across the catalogue, for the finance strip + LLC books.
 export function portfolio(items) {
   let tiedUp = 0, realized = 0, projected = 0, soldCount = 0, holdSum = 0, holdN = 0

@@ -78,6 +78,7 @@ export function itemFromRow(r) {
     sourceUrl: r.source_url,
     photos: r.photos || [],
     officialPhotos: r.official_photos || [],
+    representativePhotos: r.representative_photos || [],
     tags: r.tags || [],
     notes: r.notes || '',
     createdAt: ms(r.created_at) ?? Date.now(),
@@ -93,7 +94,8 @@ const FIELD_MAP = {
   buySource: 'buy_source', listPrice: 'list_price', listedAt: 'listed_at',
   soldPrice: 'sold_price', soldAt: 'sold_at', soldVia: 'sold_via',
   condition: 'condition', description: 'description', sourceUrl: 'source_url',
-  photos: 'photos', officialPhotos: 'official_photos', tags: 'tags', notes: 'notes',
+  photos: 'photos', officialPhotos: 'official_photos',
+  representativePhotos: 'representative_photos', tags: 'tags', notes: 'notes',
 }
 
 // camelCase patch -> snake_case row (only provided keys; ms epochs -> ISO).
@@ -180,6 +182,12 @@ export function baseDraft(item) {
     key_specs: Array.isArray(ev.key_details) ? ev.key_details : [],
     condition: item.condition || 'Good',
     suggested_price_usd: price,
+    stock_status: 'unknown',
+    modifications: [],
+    keywords: [],
+    best_platform: null,
+    best_time: null,
+    spec_source: null,
   }
 }
 
@@ -191,12 +199,34 @@ export function buildListingText(item) {
   lines.push('')
   if (item.listPrice != null) lines.push(`Asking: $${Math.round(item.listPrice).toLocaleString('en-US')}`)
   if (item.condition) lines.push(`Condition: ${item.condition}`)
+
+  // Stock vs modified — be explicit; buyers care a lot.
+  if (d.stock_status === 'modified' || (Array.isArray(d.modifications) && d.modifications.length)) {
+    lines.push('Modified from stock:')
+    for (const m of d.modifications || []) lines.push(`  • ${m}`)
+  } else if (d.stock_status === 'stock') {
+    lines.push('Configuration: 100% stock / unmodified')
+  }
+
   lines.push('')
   if (d.description || item.description) lines.push(d.description || item.description)
+
   const specs = d.key_specs || (item.evaluation && item.evaluation.key_details) || []
   if (Array.isArray(specs) && specs.length) {
     lines.push('')
     for (const s of specs) lines.push(`• ${s}`)
   }
+
+  // Disclose any stock/representative photos that aren't the actual item.
+  if (Array.isArray(item.representativePhotos) && item.representativePhotos.length) {
+    lines.push('')
+    lines.push('(Some photos are manufacturer stock images of the same / a near-identical model for reference — actual item is shown in the real photos.)')
+  }
+
+  if (Array.isArray(d.keywords) && d.keywords.length) {
+    lines.push('')
+    lines.push(d.keywords.map((k) => (k.startsWith('#') ? k : `#${k.replace(/\s+/g, '')}`)).join(' '))
+  }
+
   return lines.join('\n').trim()
 }

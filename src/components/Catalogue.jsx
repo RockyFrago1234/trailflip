@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import ItemCard from './ItemCard'
 import ItemModal from './ItemModal'
 import { STATUS_META } from '../lib/items'
-import { currency, portfolio, toCSV } from '../utils/format'
+import { currency, portfolio, toCSV, effectiveScore } from '../utils/format'
 
 const FOLDERS = [
   { id: 'all', label: 'All', emoji: '🧰', test: () => true },
@@ -13,6 +13,13 @@ const FOLDERS = [
   { id: 'sold', label: 'Sold', emoji: STATUS_META.sold.emoji, test: (i) => i.status === 'sold' },
   { id: 'scans', label: 'All Scans', emoji: '🗂️', test: (i) => !!i.evaluation },
 ]
+
+// Flip-score bands: 0–10, 10–20, … 90–100 (top band includes 100).
+const SCORE_BANDS = Array.from({ length: 10 }, (_, i) => ({
+  id: i,
+  label: `${i * 10}–${i * 10 + 10}`,
+  test: (s) => s != null && s >= i * 10 && (i === 9 ? s <= 100 : s < i * 10 + 10),
+}))
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
@@ -40,6 +47,7 @@ function PnL({ items }) {
 export default function Catalogue({ items, userId, onItemChange, onItemDelete, onScan }) {
   const [folder, setFolder] = useState('all')
   const [tag, setTag] = useState(null)
+  const [scoreBand, setScoreBand] = useState(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
 
@@ -58,14 +66,16 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
   const visible = useMemo(() => {
     const f = FOLDERS.find((x) => x.id === folder) || FOLDERS[0]
     const q = query.trim().toLowerCase()
+    const band = scoreBand != null ? SCORE_BANDS[scoreBand] : null
     return items
       .filter(f.test)
       .filter((i) => (tag ? i.tags.includes(tag) : true))
+      .filter((i) => (band ? band.test(effectiveScore(i)) : true))
       .filter((i) =>
         q ? `${i.title} ${i.brand || ''} ${i.model || ''} ${i.notes} ${i.tags.join(' ')}`.toLowerCase().includes(q) : true,
       )
       .sort((a, b) => b.updatedAt - a.updatedAt)
-  }, [items, folder, tag, query])
+  }, [items, folder, tag, scoreBand, query])
 
   const selected = items.find((i) => i.id === selectedId) || null
 
@@ -131,6 +141,28 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
               }`}
             >
               #{t}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Flip-score range filter */}
+      {items.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium text-slate-400">Flip score:</span>
+          <button
+            onClick={() => setScoreBand(null)}
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${scoreBand == null ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            Any
+          </button>
+          {SCORE_BANDS.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => setScoreBand(scoreBand === b.id ? null : b.id)}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${scoreBand === b.id ? 'bg-forest-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              {b.label}
             </button>
           ))}
         </div>

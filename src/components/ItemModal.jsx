@@ -3,7 +3,7 @@ import { Close } from './icons'
 import ImagePlaceholder from './ImagePlaceholder'
 import EvaluationReport from './EvaluationReport'
 import { getCategory, CONDITIONS } from '../data/listings'
-import { currency, itemMath } from '../utils/format'
+import { currency, itemMath, effectiveScore } from '../utils/format'
 import {
   STATUS_META,
   updateItem,
@@ -36,7 +36,9 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
   const cat = getCategory(item.category)
   const meta = STATUS_META[item.status] || STATUS_META.prospect
   const math = itemMath(item)
-  const gallery = [...item.photos, ...item.officialPhotos]
+  const score = effectiveScore(item)
+  const boosted = score != null && item.flipScore != null && score > item.flipScore
+  const gallery = [...item.photos, ...item.officialPhotos, ...item.representativePhotos]
 
   const [panel, setPanel] = useState(null) // 'buy' | 'list' | 'sold' | 'photos' | 'evaluation'
   const [busy, setBusy] = useState('')
@@ -141,20 +143,23 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
   }
 
   function removePhoto(url, which) {
-    const key = which === 'official' ? 'officialPhotos' : 'photos'
+    const key = which === 'official' ? 'officialPhotos' : which === 'representative' ? 'representativePhotos' : 'photos'
     patchItem('photos', { [key]: item[key].filter((u) => u !== url) })
   }
 
-  async function fetchOfficial() {
-    setBusy('official')
+  async function fetchOfficial(useSearch) {
+    setBusy(useSearch ? 'official-search' : 'official')
     setError('')
     setOfficial(null)
     setPicked({})
     try {
+      const payload = useSearch
+        ? { brand: item.brand, model: item.model, year: item.year }
+        : { url: officialUrl.trim(), model: [item.brand, item.model].filter(Boolean).join(' ') }
       const resp = await fetch('/api/official-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: officialUrl.trim(), model: [item.brand, item.model].filter(Boolean).join(' ') }),
+        body: JSON.stringify(payload),
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data.error || 'Could not fetch images.')
@@ -172,12 +177,17 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
     setBusy('official-add')
     setError('')
     try {
-      const stored = await uploadListingPhotos(userId, picks.map((p) => p.dataUrl))
-      const updated = await updateItem(item.id, { officialPhotos: [...item.officialPhotos, ...stored] })
+      const exact = picks.filter((p) => p.exact !== false)
+      const rep = picks.filter((p) => p.exact === false)
+      const patch = {}
+      if (exact.length) patch.officialPhotos = [...item.officialPhotos, ...(await uploadListingPhotos(userId, exact.map((p) => p.dataUrl)))]
+      if (rep.length) patch.representativePhotos = [...item.representativePhotos, ...(await uploadListingPhotos(userId, rep.map((p) => p.dataUrl)))]
+      const updated = await updateItem(item.id, patch)
       onChange(updated)
       setOfficial(null)
       setPicked({})
-      setNote(`Added ${stored.length} official photo${stored.length > 1 ? 's' : ''}.`)
+      const n = exact.length + rep.length
+      setNote(`Added ${n} photo${n > 1 ? 's' : ''}${rep.length ? ` (${rep.length} similar-model — disclosed in the listing)` : ''}.`)
     } catch (e) {
       setError(e.message || 'Could not add those.')
     } finally {
@@ -193,7 +203,12 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
       const resp = await fetch('/api/draft-listing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrls: item.photos.slice(0, 4) }),
+        body: JSON.stringify({
+          imageUrls: item.photos.slice(0, 8),
+          brand: item.brand,
+          model: item.model,
+          year: item.year,
+        }),
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data.error || 'Could not write from photos.')
@@ -205,8 +220,15 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
         key_specs: d.key_specs || prev.key_specs,
         condition: CONDITIONS.includes(d.condition) ? d.condition : prev.condition,
         suggested_price_usd: d.suggested_price_usd ?? prev.suggested_price_usd,
+        stock_status: d.stock_status || prev.stock_status,
+        modifications: Array.isArray(d.modifications) ? d.modifications : prev.modifications,
+        keywords: Array.isArray(d.keywords) ? d.keywords : prev.keywords,
+        best_platform: d.best_platform ?? prev.best_platform,
+        best_time: d.best_time ?? prev.best_time,
+        spec_source: d.spec_source ?? prev.spec_source,
       }))
       if (d.suggested_price_usd != null) setListPrice(String(d.suggested_price_usd))
+      setNote(data.researched ? 'Rewrote from your photos + web research on the model.' : 'Rewrote from your photos.')
     } catch (e) {
       setError(e.message)
     } finally {
@@ -302,8 +324,13 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
             <div className="flex flex-wrap items-center gap-2">
               <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${meta.pill}`}>{meta.emoji} {meta.label}</span>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{cat.emoji} {cat.label}</span>
-              {item.flipScore != null && (
-                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">Flip {item.flipScore}</span>
+              {score != null && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${boosted ? 'bg-forest-600' : 'bg-slate-900'}`}
+                  title={boosted ? `Rose from ${item.flipScore} after buying below asking` : 'Flip score'}
+                >
+                  Flip {score}{boosted ? ` ↑ (was ${item.flipScore})` : ''}
+                </span>
               )}
               {item.evaluation?.confidence && (
                 <span className="text-xs text-slate-400">{item.evaluation.confidence} confidence</span>
@@ -376,8 +403,8 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold text-slate-900">Your listing draft</p>
                   {item.photos.length > 0 && (
-                    <button onClick={rewriteFromPhotos} disabled={busy === 'draft'} className="rounded-full bg-trail-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-trail-600 disabled:opacity-50">
-                      {busy === 'draft' ? 'Writing…' : '✨ Rewrite from my photos'}
+                    <button onClick={rewriteFromPhotos} disabled={busy === 'draft'} className="rounded-full bg-trail-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-trail-600 disabled:opacity-50" title="Identifies the model, looks up the owner's manual for real specs, and writes the listing">
+                      {busy === 'draft' ? 'Researching…' : '✨ Research & rewrite'}
                     </button>
                   )}
                 </div>
@@ -401,6 +428,23 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
                   <Label>Description</Label>
                   <textarea rows={5} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className={`${FIELD} resize-none`} />
                 </div>
+
+                {((draft.stock_status && draft.stock_status !== 'unknown') || (draft.modifications || []).length || (draft.keywords || []).length || draft.best_platform || draft.spec_source) ? (
+                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                    {draft.stock_status === 'modified' || (draft.modifications || []).length ? (
+                      <p>🔧 <b className="text-slate-900">Modified:</b> {(draft.modifications || []).join(', ') || 'yes'}</p>
+                    ) : draft.stock_status === 'stock' ? (
+                      <p>✅ <b className="text-slate-900">Stock</b> — no modifications detected</p>
+                    ) : null}
+                    {draft.spec_source && <p>📖 Specs from {draft.spec_source}</p>}
+                    {draft.best_platform && <p>📈 <b className="text-slate-900">Best sold on:</b> {draft.best_platform}{draft.best_time ? ` · ${draft.best_time}` : ''}</p>}
+                    {(draft.keywords || []).length > 0 && (
+                      <p className="break-words">🔑 {draft.keywords.slice(0, 12).map((k) => `#${String(k).replace(/^#/, '').replace(/\s+/g, '')}`).join(' ')}</p>
+                    )}
+                    <p className="text-slate-400">All of this is included when you copy the listing below.</p>
+                  </div>
+                ) : null}
+
                 <button className={primary} onClick={saveList} disabled={busy === 'list'}>
                   {busy === 'list' ? 'Saving…' : item.status === 'listed' ? 'Save listing' : 'Mark as listed'}
                 </button>
@@ -466,25 +510,35 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
                   {item.officialPhotos.map((u) => (
                     <Thumb key={u} url={u} badge="official" onRemove={() => removePhoto(u, 'official')} />
                   ))}
+                  {item.representativePhotos.map((u) => (
+                    <Thumb key={u} url={u} badge="similar" onRemove={() => removePhoto(u, 'representative')} />
+                  ))}
                 </div>
               ) : (
                 <p className="mt-2 text-xs text-slate-500">No photos yet. Snap your own (best for trust), or pull official ones below.</p>
               )}
 
-              {/* Official photos */}
+              {/* Official photos — search the web or paste a URL; you approve each */}
               {(item.brand || item.model) && (
                 <div className="mt-4 border-t border-slate-100 pt-3">
-                  <Label>Pull official photos for an exact model (you approve each)</Label>
-                  <div className="flex gap-2">
-                    <input value={officialUrl} onChange={(e) => setOfficialUrl(e.target.value)} placeholder="Manufacturer / product-page URL" className={FIELD} />
-                    <button onClick={fetchOfficial} disabled={busy === 'official' || !/^https?:\/\//i.test(officialUrl.trim())} className={`${ghost} shrink-0`}>
+                  <Label>Add official product photos (you approve each)</Label>
+                  <button
+                    onClick={() => fetchOfficial(true)}
+                    disabled={!!busy}
+                    className="rounded-full bg-trail-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-trail-600 disabled:opacity-50"
+                  >
+                    {busy === 'official-search' ? 'Searching the web…' : '🔎 Search the web for this model'}
+                  </button>
+                  <div className="mt-2 flex gap-2">
+                    <input value={officialUrl} onChange={(e) => setOfficialUrl(e.target.value)} placeholder="…or paste a product-page URL" className={FIELD} />
+                    <button onClick={() => fetchOfficial(false)} disabled={busy === 'official' || !/^https?:\/\//i.test(officialUrl.trim())} className={`${ghost} shrink-0`}>
                       {busy === 'official' ? '…' : 'Fetch'}
                     </button>
                   </div>
                   {official && official.note && <p className="mt-2 text-xs text-slate-500">{official.note}</p>}
                   {official && official.images?.length > 0 && (
                     <>
-                      <p className="mt-3 text-xs text-slate-500">From <b>{official.source}</b> — tap the exact-match photos, then add.</p>
+                      <p className="mt-3 text-xs text-slate-500">Tap the photos that match your item, then add. <b>Similar-model</b> shots are labeled and auto-disclosed in the listing.</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {official.images.map((img, i) => (
                           <button
@@ -493,7 +547,10 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete })
                             className={`relative h-20 w-20 overflow-hidden rounded-xl border-2 ${picked[i] ? 'border-forest-500 ring-2 ring-forest-200' : 'border-slate-200'}`}
                           >
                             <img src={img.dataUrl} alt="" className="h-full w-full object-cover" />
-                            {picked[i] && <span className="absolute right-0.5 top-0.5 grid h-5 w-5 place-items-center rounded-full bg-forest-600 text-xs text-white">✓</span>}
+                            {picked[i] && <span className="absolute right-0.5 top-0.5 z-10 grid h-5 w-5 place-items-center rounded-full bg-forest-600 text-xs text-white">✓</span>}
+                            <span className={`absolute bottom-0 left-0 right-0 truncate px-1 py-0.5 text-center text-[8px] font-semibold uppercase text-white ${img.exact === false ? 'bg-amber-600/90' : 'bg-black/60'}`}>
+                              {img.exact === false ? 'similar' : img.source || 'official'}
+                            </span>
                           </button>
                         ))}
                       </div>

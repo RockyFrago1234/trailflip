@@ -1,17 +1,31 @@
 import Anthropic from '@anthropic-ai/sdk'
 
+// Two passes (web-search research + forced draft); bounded to fit the 60s limit.
 export const config = { maxDuration: 60 }
 
 const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const CATEGORIES = ['bikes', 'camping', 'climbing', 'snow', 'water', 'hiking', 'fishing', 'other']
+const UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
-const SYSTEM = `You are a top-performing reseller writing marketplace listings for used outdoor gear. From the photo(s) you write a listing so appealing a buyer wants to grab it immediately — while staying honest about condition.
+// Server-side web search (GA on Opus 4.8, built-in dynamic filtering).
+const WEB_SEARCH = { type: 'web_search_20260209', name: 'web_search', max_uses: 5 }
 
-Identify the exact make / model / year when you can. Write a punchy, specific title and a scannable, benefit-driven description: what it's great for, standout features/specs, what's included, and an honest line on condition. Avoid fluff and AI clichés; sound like a knowledgeable human who loves the gear. Suggest a fair asking price that sells fast but leaves the seller a healthy margin (around the upper-middle of typical used value). Pick the single best category from the allowed list.`
+const RESEARCH_SYSTEM = `You research a piece of used outdoor gear so a reseller can write a 100% accurate listing. From the photos, identify the exact make / model / year. Then use web_search to look up the manufacturer's owner's manual and official spec sheet for that exact model. Gather real, specific facts: official specifications (sizes, materials, weight, components, capacities, drivetrain, etc.), what's included when sold new, and notable model details. Also inspect the photos for any aftermarket parts or modifications (non-stock components, added accessories, wear, damage). Never invent specs — only report numbers you actually found or can read. Keep it factual and concise.`
 
-function buildText({ note }) {
-  let t = `Write a complete, desirable marketplace listing for the outdoor gear in the photo(s). Identify it, then produce the listing via the draft_listing tool. Allowed categories: ${CATEGORIES.join(', ')}.`
+const DRAFT_SYSTEM = `You are a top-performing reseller writing marketplace listings for used outdoor gear. Using the photos AND the research notes provided, write a listing so appealing a buyer wants it immediately — while staying scrupulously honest.
+
+Rules:
+- Use the researched manufacturer specs for accuracy (sizes, materials, components). Don't contradict the photos.
+- State clearly whether the item is STOCK or MODIFIED. If modified, list each non-stock part/change you can see or infer. If it looks fully stock, say so.
+- Write a punchy, specific title and a scannable, benefit-driven description: what it's great for, standout specs, what's included, and an honest condition line. No fluff, no AI clichés.
+- Suggest a fair asking price (upper-middle of typical used value) that sells fast with healthy margin.
+- Add marketplace keywords buyers actually search, and recommend the best platform and timing to sell this specific item.`
+
+function buildDraftText({ note, research }) {
+  let t = `Write a complete, desirable marketplace listing for the outdoor gear in the photo(s) using the draft_listing tool. Allowed categories: ${CATEGORIES.join(', ')}.`
   if (note) t += `\n\nSeller's note: ${note}`
+  if (research) t += `\n\n--- Research notes (use these for accurate specs; do not contradict the photos) ---\n${research}`
   return t
 }
 
@@ -22,12 +36,18 @@ const TOOL = {
     type: 'object',
     additionalProperties: false,
     properties: {
-      title: { type: 'string', description: 'Compelling, specific listing title (~50-70 chars). Include brand/model.' },
+      title: { type: 'string', description: 'Compelling, specific title (~50-70 chars). Include brand/model.' },
       category: { type: 'string', enum: CATEGORIES },
       condition: { type: 'string', enum: ['New', 'Like New', 'Good', 'Fair'] },
       description: { type: 'string', description: 'Desirable, scannable description (2-5 short paragraphs / lines). Honest about condition. Make them want it now.' },
-      key_specs: { type: 'array', items: { type: 'string' }, description: 'Notable specs / included items, visible or known.' },
-      repairs: { type: ['string', 'null'], description: 'Any visible damage or repairs needed, stated honestly. Null if none visible.' },
+      key_specs: { type: 'array', items: { type: 'string' }, description: 'Notable specs / included items — prefer the researched manufacturer specs.' },
+      stock_status: { type: 'string', enum: ['stock', 'modified', 'unknown'], description: 'Is the item stock or modified from factory?' },
+      modifications: { type: 'array', items: { type: 'string' }, description: 'Specific aftermarket / non-stock parts or changes. Empty array if stock.' },
+      repairs: { type: ['string', 'null'], description: 'Any visible damage or repairs needed, stated honestly. Null if none.' },
+      keywords: { type: 'array', items: { type: 'string' }, description: 'Search terms buyers type on marketplaces (brand, model, category, key specs, synonyms). 5-12 terms.' },
+      best_platform: { type: ['string', 'null'], description: 'Best marketplace for this item (e.g. Facebook Marketplace, eBay, Pinkbike, REI Re/Supply).' },
+      best_time: { type: ['string', 'null'], description: 'Best season/timing to list for max return.' },
+      spec_source: { type: ['string', 'null'], description: "Where specs came from (e.g. \"manufacturer owner's manual\") or null." },
       brand: { type: ['string', 'null'] },
       model: { type: ['string', 'null'] },
       year: { type: ['string', 'null'] },
@@ -39,15 +59,13 @@ const TOOL = {
       trade_for: { type: ['string', 'null'], description: 'Optional: good things to accept in trade, else null.' },
     },
     required: [
-      'title', 'category', 'condition', 'description', 'key_specs', 'repairs',
+      'title', 'category', 'condition', 'description', 'key_specs', 'stock_status',
+      'modifications', 'repairs', 'keywords', 'best_platform', 'best_time', 'spec_source',
       'brand', 'model', 'year', 'confidence', 'msrp_usd', 'used_low_usd',
       'used_high_usd', 'suggested_price_usd', 'trade_for',
     ],
   },
 }
-
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
 async function readBody(req) {
   if (req.body) return typeof req.body === 'string' ? JSON.parse(req.body) : req.body
@@ -56,7 +74,6 @@ async function readBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
 
-// Fetch a hosted image (e.g. an already-uploaded item photo) as a base64 block.
 async function fetchImageBlock(u) {
   try {
     const r = await fetch(u, { headers: { 'User-Agent': UA }, redirect: 'follow' })
@@ -68,6 +85,43 @@ async function fetchImageBlock(u) {
   } catch {
     return null
   }
+}
+
+// Pass A: identify the item + research the owner's manual via web search.
+async function runResearch(client, blocks, hint) {
+  const messages = [
+    {
+      role: 'user',
+      content: [
+        ...blocks,
+        {
+          type: 'text',
+          text: `Research this item${hint ? `: ${hint}` : ''}. Use web_search to find the owner's manual and official specs for the exact model, then summarize your findings in plain text: official specs, what's included new, any visible modifications, and condition notes. If web_search finds nothing useful, summarize from the photos alone.`,
+        },
+      ],
+    },
+  ]
+  try {
+    for (let i = 0; i < 4; i++) {
+      const msg = await client.messages.create({
+        model: 'claude-opus-4-8',
+        max_tokens: 3000,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'medium' },
+        system: RESEARCH_SYSTEM,
+        tools: [WEB_SEARCH],
+        messages,
+      })
+      if (msg.stop_reason === 'pause_turn') {
+        messages.push({ role: 'assistant', content: msg.content })
+        continue
+      }
+      return msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim()
+    }
+  } catch (e) {
+    console.error('research pass failed (continuing without it):', e?.message)
+  }
+  return ''
 }
 
 export default async function handler(req, res) {
@@ -84,14 +138,13 @@ export default async function handler(req, res) {
     const images = Array.isArray(body.images) ? body.images : []
     const imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls : []
     const blocks = []
-    for (const img of images.slice(0, 4)) {
+    for (const img of images.slice(0, 8)) {
       const m = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/s.exec(img || '')
       if (m && MEDIA_TYPES.includes(m[1])) {
         blocks.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } })
       }
     }
-    // Already-uploaded item photos come in as public URLs — fetch them.
-    for (const u of imageUrls.slice(0, 4 - blocks.length)) {
+    for (const u of imageUrls.slice(0, 8 - blocks.length)) {
       if (typeof u !== 'string' || !/^https?:\/\//i.test(u)) continue
       const block = await fetchImageBlock(u)
       if (block) blocks.push(block)
@@ -102,13 +155,19 @@ export default async function handler(req, res) {
     }
 
     const client = new Anthropic()
+    const hint = [body.brand, body.model, body.year].filter(Boolean).join(' ') || null
+
+    // Pass A — research (web search). Skipped/empty failures degrade gracefully.
+    const research = body.research === false ? '' : await runResearch(client, blocks, hint)
+
+    // Pass B — forced structured draft (no web search → no citation/structured-output conflict).
     const message = await client.messages.create({
       model: 'claude-opus-4-8',
-      max_tokens: 2000,
-      system: SYSTEM,
+      max_tokens: 3000,
+      system: DRAFT_SYSTEM,
       tools: [TOOL],
       tool_choice: { type: 'tool', name: 'draft_listing' },
-      messages: [{ role: 'user', content: [...blocks, { type: 'text', text: buildText({ note: body.note }) }] }],
+      messages: [{ role: 'user', content: [...blocks, { type: 'text', text: buildDraftText({ note: body.note, research }) }] }],
     })
 
     const toolBlock = message.content.find((b) => b.type === 'tool_use')
@@ -116,7 +175,7 @@ export default async function handler(req, res) {
       res.status(502).json({ error: 'Could not draft a listing from those photos. Try a clearer photo.' })
       return
     }
-    res.status(200).json({ ok: true, draft: toolBlock.input })
+    res.status(200).json({ ok: true, draft: toolBlock.input, researched: Boolean(research) })
   } catch (err) {
     console.error('draft-listing error:', err)
     const msg = err?.error?.error?.message || err?.message || 'Drafting failed.'
