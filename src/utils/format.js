@@ -52,22 +52,24 @@ export function midValue(item) {
 // Lifecycle-aware money math for one catalogue item.
 // realized: locked-in profit (sold). projected: expected profit (owned/listed).
 // spread: potential profit if bought at asking and sold mid (wishlist/prospect).
-export function itemMath(item) {
+// `extra` = per-item expenses tied to this product (travel/repair/taxes); it
+// lowers realized/projected so cards, P&L and the item modal all agree.
+export function itemMath(item, extra = 0) {
   const mid = midValue(item)
-  const out = { mid, invested: 0, realized: 0, gross: 0, costs: 0, mileageDeduction: 0, projected: 0, spread: 0, marginPct: 0, holdDays: null }
+  const out = { mid, invested: 0, realized: 0, gross: 0, costs: 0, extra: extra || 0, mileageDeduction: 0, projected: 0, spread: 0, marginPct: 0, holdDays: null }
 
   if (item.status === 'sold') {
     out.invested = item.buyPrice || 0
     out.gross = (item.soldPrice || 0) - (item.buyPrice || 0)
     out.costs = (item.fees || 0) + (item.shippingCost || 0) + (item.suppliesCost || 0)
-    out.realized = out.gross - out.costs // true cash profit after fees/shipping/supplies
+    out.realized = out.gross - out.costs - out.extra // cash profit after fees/shipping/supplies + item expenses
     out.mileageDeduction = (item.miles || 0) * MILEAGE_RATE
     out.marginPct = item.buyPrice ? (out.realized / item.buyPrice) * 100 : 0
     if (item.boughtAt && item.soldAt) out.holdDays = Math.max(0, Math.round((item.soldAt - item.boughtAt) / 86400000))
   } else if (item.status === 'owned' || item.status === 'listed') {
     out.invested = item.buyPrice || 0
     const exit = item.listPrice ?? mid
-    out.projected = exit && item.buyPrice != null ? exit - item.buyPrice : 0
+    out.projected = (exit && item.buyPrice != null ? exit - item.buyPrice : 0) - out.extra
     out.marginPct = item.buyPrice ? (out.projected / item.buyPrice) * 100 : 0
     if (item.boughtAt) out.holdDays = Math.max(0, Math.round((Date.now() - item.boughtAt) / 86400000))
   } else {
@@ -104,12 +106,12 @@ export function effectiveScore(item) {
 }
 
 // Aggregate P&L across the catalogue, for the finance strip + LLC books.
-export function portfolio(items) {
+export function portfolio(items, expenseMap = {}) {
   let tiedUp = 0, realized = 0, costs = 0, mileageDeduction = 0, projected = 0, soldCount = 0, holdSum = 0, holdN = 0
   const byStatus = {}
   for (const it of items) {
     byStatus[it.status] = (byStatus[it.status] || 0) + 1
-    const m = itemMath(it)
+    const m = itemMath(it, expenseMap[it.id] || 0)
     if (it.status === 'sold') {
       realized += m.realized
       costs += m.costs
@@ -143,20 +145,21 @@ function csvCell(v) {
 const isoDay = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : '')
 
 // Catalogue -> CSV string for the LLC / tax books.
-export function toCSV(items) {
+export function toCSV(items, expenseMap = {}) {
   const cols = [
     'Title', 'Brand', 'Model', 'Year', 'Category', 'Status',
     'Asking', 'Bought', 'Buy date', 'Source', 'Listed', 'Sold', 'Sold date',
-    'Fees', 'Shipping', 'Supplies', 'Gross profit', 'Net profit', 'Margin %',
+    'Fees', 'Shipping', 'Supplies', 'Item expenses', 'Gross profit', 'Net profit', 'Margin %',
     'Hold days', 'Miles', 'Mileage deduction', 'Tags',
   ]
   const rows = items.map((it) => {
-    const m = itemMath(it)
+    const extra = expenseMap[it.id] || 0
+    const m = itemMath(it, extra)
     return [
       it.title, it.brand, it.model, it.year, it.category, it.status,
       it.askingPrice, it.buyPrice, isoDay(it.boughtAt), it.buySource,
       it.listPrice, it.soldPrice, isoDay(it.soldAt),
-      it.fees ?? '', it.shippingCost ?? '', it.suppliesCost ?? '',
+      it.fees ?? '', it.shippingCost ?? '', it.suppliesCost ?? '', extra || '',
       it.status === 'sold' ? Math.round(m.gross) : '',
       it.status === 'sold' ? Math.round(m.realized) : '',
       Math.round(m.marginPct),

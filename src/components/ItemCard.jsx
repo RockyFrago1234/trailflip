@@ -4,8 +4,8 @@ import { STATUS_META } from '../lib/items'
 import { currency, itemMath, effectiveScore } from '../utils/format'
 import { aging, AGING_STYLE } from '../utils/aging'
 
-function MoneyLine({ item }) {
-  const m = itemMath(item)
+function MoneyLine({ item, extra }) {
+  const m = itemMath(item, extra)
   if (item.status === 'sold') {
     return (
       <>
@@ -49,7 +49,7 @@ function MoneyLine({ item }) {
   )
 }
 
-export default function ItemCard({ item, onOpen, selectable = false, selected = false, onSelect }) {
+export default function ItemCard({ item, onOpen, selectable = false, selected = false, onSelect, extraExpense = 0 }) {
   const cat = getCategory(item.category)
   const cover = item.photos[0] || item.officialPhotos[0] || null
   const meta = STATUS_META[item.status] || STATUS_META.prospect
@@ -96,7 +96,7 @@ export default function ItemCard({ item, onOpen, selectable = false, selected = 
       <div className="p-4">
         <h3 className="line-clamp-1 font-semibold text-slate-900">{item.title}</h3>
         <div className="mt-1.5">
-          <MoneyLine item={item} />
+          <MoneyLine item={item} extra={extraExpense} />
         </div>
         {age.holdDays != null && age.level !== 'fresh' && (
           <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${AGING_STYLE[age.level]}`}>

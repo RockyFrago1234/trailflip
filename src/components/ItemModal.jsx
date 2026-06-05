@@ -36,7 +36,7 @@ function Stat({ label, value, highlight }) {
   )
 }
 
-export default function ItemModal({ item, userId, onClose, onChange, onDelete, onWatch }) {
+export default function ItemModal({ item, userId, onClose, onChange, onDelete, onWatch, onExpenseChanged }) {
   const cat = getCategory(item.category)
   const meta = STATUS_META[item.status] || STATUS_META.prospect
   const math = itemMath(item)
@@ -382,6 +382,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
       const e = await createExpense(userId, { date: todayStr(), category: expForm.category, amount, note: expForm.note, itemId: item.id })
       setItemExpenses((prev) => [e, ...prev])
       setExpForm({ category: expForm.category, amount: '', note: '' })
+      onExpenseChanged?.()
     } catch (err) {
       setError(err.message || 'Could not add expense.')
     } finally {
@@ -393,6 +394,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
     setItemExpenses((prev) => prev.filter((e) => e.id !== id))
     try {
       await deleteExpense(id)
+      onExpenseChanged?.()
     } catch {
       /* ignore */
     }

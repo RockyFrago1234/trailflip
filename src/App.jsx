@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CATEGORIES, LISTINGS } from './data/listings'
 import { dealInfo } from './utils/format'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
@@ -16,6 +16,7 @@ import Compare from './components/Compare'
 import Books from './components/Books'
 import Footer from './components/Footer'
 import { loadItems } from './lib/items'
+import { loadExpenses } from './lib/expenses'
 import { fileToResizedDataURL } from './lib/resizeImage'
 
 // Supabase row (snake_case) -> app listing shape (camelCase)
@@ -50,6 +51,7 @@ export default function App() {
 
   // Personal flipper catalogue (private items) + which workspace is showing.
   const [items, setItems] = useState([])
+  const [itemExpenseMap, setItemExpenseMap] = useState({}) // itemId -> total per-item expenses
   const [view, setView] = useState('catalogue')
   const [compareBoardId, setCompareBoardId] = useState(null) // board to open in Compare
   const [shareInit, setShareInit] = useState(null) // { image, url } from a "Share → TrailFlip"
@@ -137,6 +139,27 @@ export default function App() {
       active = false
     }
   }, [user])
+
+  // Per-item expense totals (so cards / P&L / CSV match the item modal).
+  const refreshExpenseMap = useCallback(async () => {
+    if (!isSupabaseConfigured || !user) {
+      setItemExpenseMap({})
+      return
+    }
+    try {
+      const { expenses } = await loadExpenses(user.id)
+      const map = {}
+      for (const e of expenses) if (e.itemId) map[e.itemId] = (map[e.itemId] || 0) + (e.amount || 0)
+      setItemExpenseMap(map)
+    } catch {
+      setItemExpenseMap({})
+    }
+  }, [user])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshExpenseMap()
+  }, [refreshExpenseMap])
 
   // "Share → TrailFlip" (Web Share Target): open the scanner with the shared listing.
   useEffect(() => {
@@ -400,6 +423,8 @@ export default function App() {
           onScan={openEvaluator}
           onEvaluateUrl={evaluateUrl}
           onOpenCompare={openComparison}
+          itemExpenseMap={itemExpenseMap}
+          onExpensesChanged={refreshExpenseMap}
         />
       ) : effectiveView === 'compare' ? (
         <Compare userId={user?.id} openBoardId={compareBoardId} />

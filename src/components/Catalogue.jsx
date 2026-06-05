@@ -27,8 +27,8 @@ const SCORE_BANDS = Array.from({ length: 10 }, (_, i) => ({
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
-function PnL({ items }) {
-  const p = portfolio(items)
+function PnL({ items, expenseMap }) {
+  const p = portfolio(items, expenseMap)
   const cells = [
     { label: 'Tied up', value: currency(p.tiedUp) },
     { label: 'Net profit', value: `${p.realized >= 0 ? '+' : ''}${currency(p.realized)}`, good: true },
@@ -49,7 +49,7 @@ function PnL({ items }) {
   )
 }
 
-export default function Catalogue({ items, userId, onItemChange, onItemDelete, onItemAdd, onScan, onEvaluateUrl, onOpenCompare }) {
+export default function Catalogue({ items, userId, onItemChange, onItemDelete, onItemAdd, onScan, onEvaluateUrl, onOpenCompare, itemExpenseMap = {}, onExpensesChanged }) {
   const [folder, setFolder] = useState('all')
   const [tag, setTag] = useState(null)
   const [scoreBand, setScoreBand] = useState(null)
@@ -138,7 +138,7 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
   const selected = items.find((i) => i.id === selectedId) || null
 
   function exportCSV() {
-    const blob = new Blob([toCSV(items)], { type: 'text/csv;charset=utf-8' })
+    const blob = new Blob([toCSV(items, itemExpenseMap)], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -194,7 +194,7 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
 
       {items.length > 0 && (
         <div className="mt-5">
-          <PnL items={items} />
+          <PnL items={items} expenseMap={itemExpenseMap} />
         </div>
       )}
 
@@ -352,6 +352,7 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
               selectable={selectMode}
               selected={selectedIds.has(item.id)}
               onSelect={toggleSelect}
+              extraExpense={itemExpenseMap[item.id] || 0}
             />
           ))}
         </div>
@@ -385,6 +386,7 @@ export default function Catalogue({ items, userId, onItemChange, onItemDelete, o
             onItemDelete(id)
             setSelectedId(null)
           }}
+          onExpenseChanged={onExpensesChanged}
         />
       )}
 
