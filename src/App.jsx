@@ -174,6 +174,16 @@ export default function App() {
     }
   }, [])
 
+  // Toast the result of the eBay OAuth round-trip (?ebay=connected|error).
+  useEffect(() => {
+    const e = new URLSearchParams(window.location.search).get('ebay')
+    if (!e) return
+    window.history.replaceState({}, '', '/')
+    Promise.resolve().then(() =>
+      setToast(e === 'connected' ? 'eBay connected — you can list with one click 🎉' : 'eBay connection failed — please try again.'),
+    )
+  }, [])
+
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(''), 2800)

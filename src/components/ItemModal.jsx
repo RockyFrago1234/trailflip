@@ -15,6 +15,7 @@ import {
 } from '../lib/items'
 import { fileToResizedDataURL } from '../lib/resizeImage'
 import { cleanWhiteBg } from '../lib/cleanupPhoto'
+import { supabase } from '../lib/supabase'
 
 const FIELD =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-forest-400 focus:bg-white focus:ring-2 focus:ring-forest-100'
@@ -69,6 +70,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
   const [genNeedsKey, setGenNeedsKey] = useState(false)
   const [payBusy, setPayBusy] = useState(false)
   const [payLink, setPayLink] = useState('')
+  const [ebayUrl, setEbayUrl] = useState('')
 
   const photoInput = useRef(null)
 
@@ -270,6 +272,50 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
         : 'AI representative image added — it’s auto-disclosed as representative in your listing text.')
     } catch (e) {
       setError(e.message || 'Could not save the image.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function listOnEbay() {
+    setBusy('ebay')
+    setError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setError('Please sign in again.')
+        return
+      }
+      const imageUrls = [...item.photos, ...item.officialPhotos, ...item.representativePhotos]
+      const resp = await fetch('/api/ebay-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          title: draft.title || item.title,
+          description: draft.description || item.description,
+          price: item.listPrice ?? (Number(listPrice) || null),
+          condition: draft.condition || item.condition,
+          imageUrls,
+        }),
+      })
+      const data = await resp.json()
+      if (data.configured === false) {
+        setError('eBay one-click listing needs the eBay API keys + EBAY_REDIRECT_URI set on the server.')
+        return
+      }
+      if (data.connected === false) {
+        setError('Connect your eBay account first (top-right menu → Connect eBay).')
+        return
+      }
+      if (data.needsSetup) {
+        setError(data.error)
+        return
+      }
+      if (!resp.ok || data.error) throw new Error(data.error || 'eBay listing failed.')
+      setEbayUrl(data.url || '')
+      setNote('Listed on eBay! 🎉')
+    } catch (e) {
+      setError(e.message)
     } finally {
       setBusy('')
     }
@@ -680,7 +726,11 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
                     <button className={ghost} onClick={() => navigator.share({ title: item.title, text: buildListingText(item) }).catch(() => {})}>Share…</button>
                   )}
                 </div>
-                <p className="mt-2 text-[11px] text-slate-400">Opening Facebook/eBay copies your title first — paste it, then tap the next field above. (True one-click listing is possible on eBay via its API — ask to set it up.)</p>
+                <div className="mt-2">
+                  <button className={primary} onClick={listOnEbay} disabled={busy === 'ebay'}>{busy === 'ebay' ? 'Listing on eBay…' : '🟢 List on eBay — one click'}</button>
+                  {ebayUrl && <a href={ebayUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-xs font-semibold text-forest-700 hover:underline">View live listing ↗</a>}
+                </div>
+                <p className="mt-2 text-[11px] text-slate-400">Facebook/eBay buttons copy your title first — paste it, then tap the next field above. <b>List on eBay</b> posts directly via the eBay API (connect eBay in the top-right menu; needs your eBay business policies set up).</p>
 
                 <div className="mt-3 border-t border-forest-200/60 pt-3">
                   <button className={ghost} onClick={createPaymentLink} disabled={payBusy}>{payBusy ? 'Creating…' : '💳 Create Stripe payment link'}</button>

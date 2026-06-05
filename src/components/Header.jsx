@@ -133,6 +133,15 @@ export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost
                     ♥ My favorites
                   </button>
                   <button
+                    onClick={() => {
+                      setMenu(false)
+                      window.location.href = `/api/ebay-connect?uid=${user.id}`
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                  >
+                    🟢 Connect eBay
+                  </button>
+                  <button
                     onClick={async () => {
                       setMenu(false)
                       await signOut()
