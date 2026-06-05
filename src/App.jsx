@@ -10,6 +10,7 @@ import ListingGrid from './components/ListingGrid'
 import ListingModal from './components/ListingModal'
 import PostListingModal from './components/PostListingModal'
 import AuthModal from './components/AuthModal'
+import EvaluatorModal from './components/EvaluatorModal'
 import Footer from './components/Footer'
 
 // Supabase row (snake_case) -> app listing shape (camelCase)
@@ -53,6 +54,7 @@ export default function App() {
   const [selected, setSelected] = useState(null)
   const [showPost, setShowPost] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
+  const [showEvaluator, setShowEvaluator] = useState(false)
   const [authReason, setAuthReason] = useState('')
   const [toast, setToast] = useState('')
 
@@ -169,6 +171,14 @@ export default function App() {
     setShowPost(true)
   }
 
+  function openEvaluator() {
+    if (!user) {
+      requireAuth('Log in to use the AI deal evaluator.')
+      return
+    }
+    setShowEvaluator(true)
+  }
+
   async function addListing(listing) {
     setShowPost(false)
     if (isSupabaseConfigured && user) {
@@ -251,6 +261,7 @@ export default function App() {
         onPost={openPost}
         onHome={goHome}
         onLogin={() => requireAuth('')}
+        onEvaluate={openEvaluator}
       />
 
       <Hero stats={stats} onPost={openPost} onBrowse={scrollToBrowse} />
@@ -312,6 +323,8 @@ export default function App() {
       )}
 
       {showAuth && <AuthModal reason={authReason} onClose={() => setShowAuth(false)} />}
+
+      {showEvaluator && <EvaluatorModal onClose={() => setShowEvaluator(false)} />}
 
       {toast && (
         <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">

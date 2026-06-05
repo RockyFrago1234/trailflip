@@ -7,7 +7,7 @@ function initials(name = '') {
   return (parts.map((p) => p[0]).slice(0, 2).join('') || name[0] || 'U').toUpperCase()
 }
 
-export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost, onHome, onLogin }) {
+export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost, onHome, onLogin, onEvaluate }) {
   const { user, displayName, signOut } = useAuth()
   const [menu, setMenu] = useState(false)
 
@@ -45,6 +45,15 @@ export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost
               {savedCount}
             </span>
           )}
+        </button>
+
+        <button
+          onClick={onEvaluate}
+          className="shrink-0 rounded-full bg-trail-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-trail-600"
+          title="Evaluate a deal with AI"
+        >
+          <span className="sm:hidden">✨</span>
+          <span className="hidden sm:inline">✨ Evaluate</span>
         </button>
 
         <button
