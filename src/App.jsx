@@ -11,7 +11,9 @@ import ListingModal from './components/ListingModal'
 import PostListingModal from './components/PostListingModal'
 import AuthModal from './components/AuthModal'
 import EvaluatorModal from './components/EvaluatorModal'
+import Catalogue from './components/Catalogue'
 import Footer from './components/Footer'
+import { loadItems } from './lib/items'
 
 // Supabase row (snake_case) -> app listing shape (camelCase)
 function fromRow(r) {
@@ -42,6 +44,10 @@ export default function App() {
   const [listings, setListings] = useState([])
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState([])
+
+  // Personal flipper catalogue (private items) + which workspace is showing.
+  const [items, setItems] = useState([])
+  const [view, setView] = useState('catalogue')
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
@@ -100,6 +106,28 @@ export default function App() {
       if (active) setSaved((data || []).map((r) => r.listing_id))
     }
     loadFavs()
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  // Load the user's private catalogue
+  useEffect(() => {
+    let active = true
+    async function load() {
+      if (!isSupabaseConfigured || !user) {
+        if (active) setItems([])
+        return
+      }
+      try {
+        const data = await loadItems(user.id)
+        if (active) setItems(data)
+      } catch (e) {
+        console.error('Catalogue load failed:', e.message)
+        if (active) setItems([])
+      }
+    }
+    load()
     return () => {
       active = false
     }
@@ -229,6 +257,23 @@ export default function App() {
     setToast('Listing deleted.')
   }
 
+  // ---- Catalogue (private items) ----
+  function addItem(item) {
+    setItems((prev) => [item, ...prev])
+    setView('catalogue')
+  }
+  function changeItem(updated) {
+    setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
+  }
+  function removeItem(id) {
+    setItems((prev) => prev.filter((i) => i.id !== id))
+  }
+  const findItemMatches = (key) => (key ? items.filter((i) => i.matchKey === key) : [])
+  function goToCatalogue() {
+    setShowEvaluator(false)
+    setView('catalogue')
+  }
+
   function resetFilters() {
     setQuery('')
     setCategory('all')
@@ -248,6 +293,9 @@ export default function App() {
     document.getElementById('browse')?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // The catalogue is the logged-in home; logged-out visitors see the marketplace.
+  const effectiveView = user ? view : 'market'
+
   return (
     <div className="min-h-screen">
       <Header
@@ -262,46 +310,60 @@ export default function App() {
         onHome={goHome}
         onLogin={() => requireAuth('')}
         onEvaluate={openEvaluator}
+        view={effectiveView}
+        onView={setView}
       />
 
-      <Hero stats={stats} onPost={openPost} onBrowse={scrollToBrowse} />
-
-      <main id="browse" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-8">
-        <FilterBar
-          categories={CATEGORIES}
-          category={category}
-          onCategory={setCategory}
-          type={type}
-          onType={setType}
-          condition={condition}
-          onCondition={setCondition}
-          sort={sort}
-          onSort={setSort}
-          onlyDeals={onlyDeals}
-          onToggleDeals={() => setOnlyDeals((v) => !v)}
-          onlySaved={onlySaved}
-          onToggleSaved={() => setOnlySaved((v) => !v)}
-          savedCount={saved.length}
-          count={filtered.length}
+      {effectiveView === 'catalogue' ? (
+        <Catalogue
+          items={items}
+          userId={user?.id}
+          onItemChange={changeItem}
+          onItemDelete={removeItem}
+          onScan={openEvaluator}
         />
+      ) : (
+        <>
+          <Hero stats={stats} onPost={openPost} onBrowse={scrollToBrowse} />
 
-        {loading ? (
-          <div className="mt-16 flex flex-col items-center justify-center gap-3 text-slate-500">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-forest-600" />
-            <p className="text-sm">Loading the latest gear…</p>
-          </div>
-        ) : (
-          <ListingGrid
-            listings={filtered}
-            savedSet={savedSet}
-            onToggleSave={toggleSave}
-            onOpen={setSelected}
-            onReset={resetFilters}
-          />
-        )}
-      </main>
+          <main id="browse" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-8">
+            <FilterBar
+              categories={CATEGORIES}
+              category={category}
+              onCategory={setCategory}
+              type={type}
+              onType={setType}
+              condition={condition}
+              onCondition={setCondition}
+              sort={sort}
+              onSort={setSort}
+              onlyDeals={onlyDeals}
+              onToggleDeals={() => setOnlyDeals((v) => !v)}
+              onlySaved={onlySaved}
+              onToggleSaved={() => setOnlySaved((v) => !v)}
+              savedCount={saved.length}
+              count={filtered.length}
+            />
 
-      <Footer onPost={openPost} />
+            {loading ? (
+              <div className="mt-16 flex flex-col items-center justify-center gap-3 text-slate-500">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-forest-600" />
+                <p className="text-sm">Loading the latest gear…</p>
+              </div>
+            ) : (
+              <ListingGrid
+                listings={filtered}
+                savedSet={savedSet}
+                onToggleSave={toggleSave}
+                onOpen={setSelected}
+                onReset={resetFilters}
+              />
+            )}
+          </main>
+
+          <Footer onPost={openPost} />
+        </>
+      )}
 
       {selected && (
         <ListingModal
@@ -324,7 +386,14 @@ export default function App() {
 
       {showAuth && <AuthModal reason={authReason} onClose={() => setShowAuth(false)} />}
 
-      {showEvaluator && <EvaluatorModal onClose={() => setShowEvaluator(false)} />}
+      {showEvaluator && (
+        <EvaluatorModal
+          onClose={() => setShowEvaluator(false)}
+          onSaved={addItem}
+          findMatches={findItemMatches}
+          onGoToCatalogue={goToCatalogue}
+        />
+      )}
 
       {toast && (
         <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
