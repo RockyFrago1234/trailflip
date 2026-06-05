@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512" role="img" aria-label="TrailFlip">
+  <rect width="64" height="64" fill="#15803d" />
+  <path d="M10 47 L26 21 L35 35 L41 27 L54 47 Z" fill="#ffffff" />
+  <path d="M26 21 L31.5 30 L20.5 30 Z" fill="#bbf7d0" />
+  <circle cx="46" cy="20" r="5" fill="#f97316" />
+</svg>

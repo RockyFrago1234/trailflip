@@ -5,11 +5,12 @@ import { fileToResizedDataURL } from '../lib/resizeImage'
 import { useAuth } from '../context/AuthProvider'
 import { createItem, fieldsFromEvaluation, makeMatchKey, uploadListingPhotos, STATUS_META } from '../lib/items'
 
-export default function EvaluatorModal({ onClose, onSaved, findMatches, onGoToCatalogue }) {
+export default function EvaluatorModal({ onClose, onSaved, findMatches, onGoToCatalogue, initialImage = null, initialUrl = '' }) {
   const { user } = useAuth()
-  const [mode, setMode] = useState('image') // 'image' | 'url'
-  const [image, setImage] = useState(null)
-  const [url, setUrl] = useState('')
+  const [mode, setMode] = useState(initialUrl ? 'url' : 'image') // 'image' | 'url'
+  const [image, setImage] = useState(initialImage)
+  const [url, setUrl] = useState(initialUrl)
+  const autoRan = useRef(false)
   const [price, setPrice] = useState('')
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
@@ -56,6 +57,15 @@ export default function EvaluatorModal({ onClose, onSaved, findMatches, onGoToCa
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
   }, [mode])
+
+  // Shared in via "Share → TrailFlip" — scan it automatically.
+  useEffect(() => {
+    if (!autoRan.current && (initialImage || initialUrl)) {
+      autoRan.current = true
+      evaluate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const canSubmit = mode === 'image' ? !!image : /^https?:\/\/.+/i.test(url.trim())
 

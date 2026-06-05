@@ -14,6 +14,7 @@ import EvaluatorModal from './components/EvaluatorModal'
 import Catalogue from './components/Catalogue'
 import Footer from './components/Footer'
 import { loadItems } from './lib/items'
+import { fileToResizedDataURL } from './lib/resizeImage'
 
 // Supabase row (snake_case) -> app listing shape (camelCase)
 function fromRow(r) {
@@ -48,6 +49,7 @@ export default function App() {
   // Personal flipper catalogue (private items) + which workspace is showing.
   const [items, setItems] = useState([])
   const [view, setView] = useState('catalogue')
+  const [shareInit, setShareInit] = useState(null) // { image, url } from a "Share → TrailFlip"
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
@@ -132,6 +134,42 @@ export default function App() {
       active = false
     }
   }, [user])
+
+  // "Share → TrailFlip" (Web Share Target): open the scanner with the shared listing.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const shared = params.get('shared') === '1'
+    const sharedText = params.get('text') || params.get('url') || ''
+    if (!shared && !sharedText) return
+    let active = true
+    ;(async () => {
+      let image = null
+      let link = ''
+      if (shared) {
+        try {
+          const metaResp = await caches.match('/__shared_meta')
+          const meta = metaResp ? await metaResp.json() : {}
+          link = meta.url || (/^https?:\/\//i.test(meta.text || '') ? meta.text : '')
+          const imgResp = await caches.match('/__shared_image')
+          if (imgResp) image = await fileToResizedDataURL(await imgResp.blob())
+          const cache = await caches.open('trailflip-share')
+          cache.delete('/__shared_image')
+          cache.delete('/__shared_meta')
+        } catch {
+          /* ignore */
+        }
+      } else {
+        link = /^https?:\/\//i.test(sharedText) ? sharedText : ''
+      }
+      window.history.replaceState({}, '', '/')
+      if (!active || (!image && !link)) return
+      setShareInit({ image, url: link })
+      setShowEvaluator(true)
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!toast) return
@@ -388,10 +426,15 @@ export default function App() {
 
       {showEvaluator && (
         <EvaluatorModal
-          onClose={() => setShowEvaluator(false)}
+          onClose={() => {
+            setShowEvaluator(false)
+            setShareInit(null)
+          }}
           onSaved={addItem}
           findMatches={findItemMatches}
           onGoToCatalogue={goToCatalogue}
+          initialImage={shareInit?.image || null}
+          initialUrl={shareInit?.url || ''}
         />
       )}
 
