@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { loadExpenses, createExpense, deleteExpense, EXPENSE_CATEGORIES, expenseLabel } from '../lib/expenses'
 import { computeBooks, taxYears, booksSummaryCSV, DEFAULT_SET_ASIDE } from '../utils/tax'
+import { monthlyProfit, roiByCategory, bestWorstFlips } from '../utils/insights'
 import { currency, toCSV } from '../utils/format'
+import { getCategory } from '../data/listings'
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
@@ -65,6 +67,16 @@ export default function Books({ items, userId }) {
   const years = useMemo(() => taxYears(items, expenses), [items, expenses])
   const b = useMemo(() => computeBooks(items, expenses, year, rate), [items, expenses, year, rate])
   const itemsById = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.title])), [items])
+  const itemExpenseMap = useMemo(() => {
+    const m = {}
+    for (const e of expenses) if (e.itemId) m[e.itemId] = (m[e.itemId] || 0) + e.amount
+    return m
+  }, [expenses])
+  const monthly = useMemo(() => monthlyProfit(items, itemExpenseMap), [items, itemExpenseMap])
+  const byCat = useMemo(() => roiByCategory(items, itemExpenseMap), [items, itemExpenseMap])
+  const flips = useMemo(() => bestWorstFlips(items, itemExpenseMap), [items, itemExpenseMap])
+  const maxMonth = Math.max(1, ...monthly.map((mo) => Math.abs(mo.total)))
+  const maxCat = Math.max(1, ...byCat.map((c) => Math.abs(c.realized)))
 
   async function addExpense() {
     const amount = Number(form.amount)
@@ -110,6 +122,73 @@ export default function Books({ items, userId }) {
         <Kpi label="Net profit" value={currency(b.netProfit)} tone={b.netProfit >= 0 ? 'good' : 'bad'} />
         <Kpi label={`Set aside ${Math.round(rate * 100)}%`} value={currency(b.setAside)} tone="bad" />
       </div>
+
+      {byCat.length > 0 && (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-bold text-slate-900">📈 Trends &amp; insights <span className="font-normal text-slate-400">(all-time)</span></p>
+
+          <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Net profit · last 12 months</p>
+          <div className="mt-2 flex h-32 items-end gap-1">
+            {monthly.map((mo, i) => {
+              const pct = Math.round((Math.abs(mo.total) / maxMonth) * 100)
+              return (
+                <div key={i} className="flex h-full flex-1 flex-col justify-end" title={`${mo.label}: ${currency(mo.total)} · ${mo.count} sold`}>
+                  <div className={`w-full rounded-t ${mo.total < 0 ? 'bg-rose-400' : 'bg-forest-500'}`} style={{ height: `${Math.max(pct, mo.total ? 4 : 0)}%` }} />
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-1 flex gap-1">
+            {monthly.map((mo, i) => <div key={i} className="flex-1 text-center text-[9px] text-slate-400">{mo.label[0]}</div>)}
+          </div>
+
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Profit by category</p>
+              <div className="mt-2 space-y-1.5">
+                {byCat.map((c) => {
+                  const cat = getCategory(c.id)
+                  const pct = Math.round((Math.abs(c.realized) / maxCat) * 100)
+                  return (
+                    <div key={c.id} className="flex items-center gap-2 text-sm">
+                      <span className="w-24 shrink-0 truncate text-slate-600">{cat.emoji} {cat.label}</span>
+                      <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <div className={`h-full ${c.realized < 0 ? 'bg-rose-400' : 'bg-forest-500'}`} style={{ width: `${Math.max(pct, 3)}%` }} />
+                      </div>
+                      <span className="w-24 shrink-0 text-right font-semibold tabular-nums text-slate-900">{currency(c.realized)} <span className="font-normal text-slate-400">{c.marginPct}%</span></span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Best flips</p>
+              <div className="mt-2 space-y-1">
+                {flips.best.map((f) => (
+                  <div key={f.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="truncate text-slate-700">{f.title}</span>
+                    <span className="shrink-0 font-semibold text-forest-700">+{currency(f.realized)}{f.holdDays != null ? ` · ${f.holdDays}d` : ''}</span>
+                  </div>
+                ))}
+              </div>
+              {flips.worst.length > 0 && (
+                <>
+                  <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Losses</p>
+                  <div className="mt-2 space-y-1">
+                    {flips.worst.map((f) => (
+                      <div key={f.id} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="truncate text-slate-700">{f.title}</span>
+                        <span className="shrink-0 font-semibold text-rose-600">{currency(f.realized)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         {/* Schedule C breakdown */}
