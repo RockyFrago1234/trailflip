@@ -19,7 +19,8 @@ function initials(name = '') {
   return parts.map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '🙂'
 }
 
-export default function ListingModal({ listing, saved, onToggleSave, onClose }) {
+export default function ListingModal({ listing, saved, onToggleSave, onClose, currentUserId, onDelete }) {
+  const isOwner = Boolean(currentUserId && listing.userId && listing.userId === currentUserId)
   const [note, setNote] = useState('')
 
   useEffect(() => {
@@ -167,6 +168,17 @@ export default function ListingModal({ listing, saved, onToggleSave, onClose }) 
               <Heart filled={saved} />
             </button>
           </div>
+
+          {isOwner && onDelete && (
+            <button
+              onClick={() => {
+                if (window.confirm('Delete this listing? This cannot be undone.')) onDelete(listing.id)
+              }}
+              className="mt-3 w-full rounded-full border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+            >
+              Delete my listing
+            </button>
+          )}
 
           {note && (
             <p className="mt-3 rounded-xl bg-forest-50 px-3 py-2 text-sm font-medium text-forest-800">

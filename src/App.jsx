@@ -2,29 +2,21 @@ import { useEffect, useMemo, useState } from 'react'
 import { CATEGORIES, LISTINGS } from './data/listings'
 import { dealInfo } from './utils/format'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
+import { useAuth } from './context/AuthProvider'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import FilterBar from './components/FilterBar'
 import ListingGrid from './components/ListingGrid'
 import ListingModal from './components/ListingModal'
 import PostListingModal from './components/PostListingModal'
+import AuthModal from './components/AuthModal'
 import Footer from './components/Footer'
-
-const LS_SAVED = 'trailflip.saved.v1'
-
-function load(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : fallback
-  } catch {
-    return fallback
-  }
-}
 
 // Supabase row (snake_case) -> app listing shape (camelCase)
 function fromRow(r) {
   return {
     id: r.id,
+    userId: r.user_id ?? null,
     title: r.title,
     category: r.category,
     type: r.type,
@@ -44,9 +36,11 @@ function fromRow(r) {
 }
 
 export default function App() {
+  const { user, displayName } = useAuth()
+
   const [listings, setListings] = useState([])
   const [loading, setLoading] = useState(true)
-  const [saved, setSaved] = useState(() => load(LS_SAVED, []))
+  const [saved, setSaved] = useState([])
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
@@ -58,6 +52,8 @@ export default function App() {
 
   const [selected, setSelected] = useState(null)
   const [showPost, setShowPost] = useState(false)
+  const [showAuth, setShowAuth] = useState(false)
+  const [authReason, setAuthReason] = useState('')
   const [toast, setToast] = useState('')
 
   // Load listings from the shared database (fall back to local seed if offline)
@@ -90,9 +86,22 @@ export default function App() {
     }
   }, [])
 
+  // Favorites live on the account
   useEffect(() => {
-    localStorage.setItem(LS_SAVED, JSON.stringify(saved))
-  }, [saved])
+    let active = true
+    async function loadFavs() {
+      if (!isSupabaseConfigured || !user) {
+        if (active) setSaved([])
+        return
+      }
+      const { data } = await supabase.from('favorites').select('listing_id').eq('user_id', user.id)
+      if (active) setSaved((data || []).map((r) => r.listing_id))
+    }
+    loadFavs()
+    return () => {
+      active = false
+    }
+  }, [user])
 
   useEffect(() => {
     if (!toast) return
@@ -133,14 +142,38 @@ export default function App() {
     return { listings: all.length, deals: deals.length, profit }
   }, [all])
 
-  function toggleSave(id) {
-    setSaved((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  function requireAuth(reason) {
+    setAuthReason(reason)
+    setShowAuth(true)
+  }
+
+  async function toggleSave(id) {
+    if (!user) {
+      requireAuth('Log in to save favorites to your account.')
+      return
+    }
+    const isSaved = saved.includes(id)
+    setSaved((prev) => (isSaved ? prev.filter((x) => x !== id) : [...prev, id]))
+    if (isSaved) {
+      await supabase.from('favorites').delete().eq('user_id', user.id).eq('listing_id', id)
+    } else {
+      await supabase.from('favorites').insert({ user_id: user.id, listing_id: id })
+    }
+  }
+
+  function openPost() {
+    if (!user) {
+      requireAuth('Log in to post a listing.')
+      return
+    }
+    setShowPost(true)
   }
 
   async function addListing(listing) {
     setShowPost(false)
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && user) {
       const row = {
+        user_id: user.id,
         title: listing.title,
         category: listing.category,
         type: listing.type,
@@ -149,8 +182,8 @@ export default function App() {
         condition: listing.condition,
         location: listing.location,
         emoji: listing.emoji,
-        seller: listing.seller,
-        rating: listing.rating,
+        seller: displayName,
+        rating: 5.0,
         description: listing.description,
         trade_for: listing.tradeFor || '',
       }
@@ -173,6 +206,17 @@ export default function App() {
     setQuery('')
     setSort('new')
     scrollToBrowse()
+  }
+
+  async function deleteListing(id) {
+    const { error } = await supabase.from('listings').delete().eq('id', id)
+    if (error) {
+      setToast('Could not delete — please try again.')
+      return
+    }
+    setListings((prev) => prev.filter((l) => l.id !== id))
+    setSelected(null)
+    setToast('Listing deleted.')
   }
 
   function resetFilters() {
@@ -204,11 +248,12 @@ export default function App() {
           setOnlySaved(true)
           scrollToBrowse()
         }}
-        onPost={() => setShowPost(true)}
+        onPost={openPost}
         onHome={goHome}
+        onLogin={() => requireAuth('')}
       />
 
-      <Hero stats={stats} onPost={() => setShowPost(true)} onBrowse={scrollToBrowse} />
+      <Hero stats={stats} onPost={openPost} onBrowse={scrollToBrowse} />
 
       <main id="browse" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-8">
         <FilterBar
@@ -245,7 +290,7 @@ export default function App() {
         )}
       </main>
 
-      <Footer onPost={() => setShowPost(true)} />
+      <Footer onPost={openPost} />
 
       {selected && (
         <ListingModal
@@ -253,6 +298,8 @@ export default function App() {
           saved={savedSet.has(selected.id)}
           onToggleSave={toggleSave}
           onClose={() => setSelected(null)}
+          currentUserId={user?.id}
+          onDelete={deleteListing}
         />
       )}
 
@@ -263,6 +310,8 @@ export default function App() {
           onSubmit={addListing}
         />
       )}
+
+      {showAuth && <AuthModal reason={authReason} onClose={() => setShowAuth(false)} />}
 
       {toast && (
         <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">

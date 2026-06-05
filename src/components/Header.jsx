@@ -1,6 +1,16 @@
+import { useState } from 'react'
 import { Logo, Search, Heart } from './icons'
+import { useAuth } from '../context/AuthProvider'
 
-export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost, onHome }) {
+function initials(name = '') {
+  const parts = name.split(' ').filter(Boolean)
+  return (parts.map((p) => p[0]).slice(0, 2).join('') || name[0] || 'U').toUpperCase()
+}
+
+export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost, onHome, onLogin }) {
+  const { user, displayName, signOut } = useAuth()
+  const [menu, setMenu] = useState(false)
+
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-4">
@@ -44,6 +54,59 @@ export default function Header({ query, onQuery, savedCount, onOpenSaved, onPost
           <span className="sm:hidden">+ Post</span>
           <span className="hidden sm:inline">+ Post listing</span>
         </button>
+
+        {user ? (
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setMenu((v) => !v)}
+              className="grid h-9 w-9 place-items-center rounded-full bg-forest-100 text-sm font-bold text-forest-700 ring-1 ring-forest-200 transition hover:bg-forest-200"
+              aria-label="Account menu"
+            >
+              {initials(displayName)}
+            </button>
+            {menu && (
+              <>
+                <button
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setMenu(false)}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                />
+                <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                  <div className="border-b border-slate-100 px-3 py-2 text-xs text-slate-500">
+                    Signed in as
+                    <div className="truncate font-semibold text-slate-800">{displayName}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setMenu(false)
+                      onOpenSaved()
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                  >
+                    ♥ My favorites
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setMenu(false)
+                      await signOut()
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+                  >
+                    Log out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={onLogin}
+            className="hidden shrink-0 rounded-full px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 sm:block"
+          >
+            Log in
+          </button>
+        )}
       </div>
     </header>
   )
