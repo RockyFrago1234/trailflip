@@ -245,7 +245,7 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data.error || 'Image generation failed.')
-      if (data.configured === false) {
+      if (data.needsKey) {
         setGenNeedsKey(true)
         return
       }
@@ -826,11 +826,11 @@ export default function ItemModal({ item, userId, onClose, onChange, onDelete, o
                     </button>
                   )}
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">Studio mode re-lights your real photo into a clean catalog shot; representative mode generates a catalog image of the model (auto-disclosed as representative in your listing).</p>
+                <p className="mt-1 text-[11px] text-slate-400">Representative generates a <b>free</b> catalog image of the model (auto-disclosed in your listing). Studio re-lights your own photo into a clean shot (needs an OpenAI key).</p>
                 {genNeedsKey && (
                   <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                    <p className="font-semibold">Add an OpenAI key to turn this on</p>
-                    <p className="mt-1">Set <span className="font-mono">OPENAI_API_KEY</span> in Vercel → Settings → Environment Variables (get one at platform.openai.com → API keys), then redeploy. Costs ~a few cents per image.</p>
+                    <p className="font-semibold">Studio mode needs an OpenAI key</p>
+                    <p className="mt-1">Set <span className="font-mono">OPENAI_API_KEY</span> in Vercel → Settings → Environment Variables (platform.openai.com → API keys, then verify your org), and redeploy. Or just use <b>Representative</b> — it’s free.</p>
                   </div>
                 )}
                 {genImage && (

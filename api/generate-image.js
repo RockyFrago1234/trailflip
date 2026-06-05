@@ -82,41 +82,56 @@ async function edit(key, prompt, blob) {
   return b64
 }
 
+// Free, no-key fallback for representative images (Flux via Pollinations).
+async function pollinations(prompt) {
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&model=flux`
+  const r = await fetch(url, { headers: { 'User-Agent': UA } })
+  if (!r.ok) throw new Error(`Free image service failed (${r.status}).`)
+  const buf = Buffer.from(await r.arrayBuffer())
+  if (buf.length < 1000) throw new Error('Free image service returned no image — try again.')
+  const mime = (r.headers.get('content-type') || 'image/jpeg').split(';')[0]
+  return { b64: buf.toString('base64'), mime }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
   }
-  const key = process.env.OPENAI_API_KEY
-  if (!key) {
-    res.status(200).json({ configured: false })
-    return
-  }
   try {
+    const key = process.env.OPENAI_API_KEY
     const body = await readBody(req)
     const mode = body.mode === 'studio' && (body.image || body.imageUrl) ? 'studio' : 'representative'
     const prompt = buildPrompt({ mode, ...body })
 
-    let b64
+    let image
     if (mode === 'studio') {
+      // Editing the real photo needs gpt-image-1 (verified OpenAI org).
+      if (!key) {
+        res.status(200).json({ needsKey: true, error: 'Studio mode (re-lighting your real photo) needs an OpenAI key. Representative mode is free — try that.' })
+        return
+      }
       try {
-        b64 = await edit(key, prompt, await sourceBlob(body))
+        const b64 = await edit(key, prompt, await sourceBlob(body))
+        image = `data:image/png;base64,${b64}`
       } catch (e) {
-        // gpt-image-1 (and its edits) require a verified org on many accounts.
-        const m = String(e.message || '')
-        if (/verif/i.test(m)) {
-          throw new Error("OpenAI needs your organization verified to use the studio (image-edit) model. Verify at platform.openai.com/settings/organization/general — or use 'Generate representative image', which falls back automatically.", { cause: e })
+        if (/verif/i.test(String(e.message || ''))) {
+          res.status(200).json({ needsKey: true, error: 'OpenAI needs your org verified for Studio mode (image edits) — verify at platform.openai.com/settings/organization/general, or use Representative (free).' })
+          return
         }
         throw e
       }
+    } else if (key) {
+      // Best quality when a key is present: gpt-image-1, else dall-e-3.
+      let b64
+      try { b64 = await generate(key, 'gpt-image-1', prompt) } catch { b64 = await generate(key, 'dall-e-3', prompt) }
+      image = `data:image/png;base64,${b64}`
     } else {
-      try {
-        b64 = await generate(key, 'gpt-image-1', prompt)
-      } catch {
-        b64 = await generate(key, 'dall-e-3', prompt) // robust fallback
-      }
+      // No key → free Flux. Works out of the box.
+      const { b64, mime } = await pollinations(prompt)
+      image = `data:${mime};base64,${b64}`
     }
-    res.status(200).json({ configured: true, mode, image: `data:image/png;base64,${b64}` })
+    res.status(200).json({ ok: true, mode, image })
   } catch (err) {
     console.error('generate-image error:', err)
     res.status(500).json({ error: err?.message || 'Image generation failed.' })
